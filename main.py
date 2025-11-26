@@ -212,8 +212,8 @@ class StartMenu:
 
     def open_accounts_module(self):
         """فتح قسم الحسابات"""
-        print("فتح قسم الحسابات")
-        # سيتم تنفيذها لاحقاً
+        from accounts_page import AccountsPage
+        AccountsPage(self.root)
 
     def open_agriculture_transfer(self):
         """فتح ترحيل الزراعة"""

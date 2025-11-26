@@ -123,7 +123,59 @@ class Database:
             )
         ''')
         
+        # جدول حسابات البائعين
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sellers_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_name TEXT NOT NULL,
+                remaining_amount REAL DEFAULT 0,
+                total_credit REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         print("تم تهيئة قاعدة البيانات بنجاح")
+    
+    def get_all_sellers_accounts(self):
+        """جلب جميع حسابات البائعين"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, seller_name, remaining_amount, total_credit FROM sellers_accounts ORDER BY seller_name')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+    
+    def add_seller_account(self, seller_name, remaining_amount, total_credit):
+        """إضافة حساب بائع جديد"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO sellers_accounts (seller_name, remaining_amount, total_credit)
+            VALUES (?, ?, ?)
+        ''', (seller_name, remaining_amount, total_credit))
+        conn.commit()
+        conn.close()
+    
+    def update_seller_account(self, account_id, seller_name, remaining_amount, total_credit):
+        """تحديث حساب بائع"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE sellers_accounts 
+            SET seller_name = ?, remaining_amount = ?, total_credit = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (seller_name, remaining_amount, total_credit, account_id))
+        conn.commit()
+        conn.close()
+    
+    def delete_seller_account(self, account_id):
+        """حذف حساب بائع"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM sellers_accounts WHERE id = ?', (account_id,))
+        conn.commit()
+        conn.close()
 
