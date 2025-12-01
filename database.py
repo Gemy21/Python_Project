@@ -128,6 +128,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS sellers_accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 seller_name TEXT NOT NULL,
+                phone TEXT, -- رقم الهاتف (جديد)
                 remaining_amount REAL DEFAULT 0,
                 total_credit REAL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -135,27 +136,193 @@ class Database:
             )
         ''')
         
+        # محاولة إضافة عمود phone إذا لم يكن موجوداً
+        try:
+            cursor.execute('ALTER TABLE sellers_accounts ADD COLUMN phone TEXT')
+        except sqlite3.OperationalError:
+            pass
+        
+        # جدول معاملات البائعين (الحساب الجاري)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS seller_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seller_id INTEGER NOT NULL,
+                amount REAL DEFAULT 0,
+                status TEXT, -- مدفوع / متبقي
+                count REAL DEFAULT 0,
+                weight REAL DEFAULT 0,
+                price REAL DEFAULT 0,
+                item_name TEXT,
+                date TEXT,
+                day_name TEXT,
+                equipment TEXT,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (seller_id) REFERENCES sellers_accounts(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # جدول الوجبات / الأصناف
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS meals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                price_per_kg REAL DEFAULT 0,
+                equipment_weight REAL DEFAULT 0, -- وزن العدة المقابل (مثلاً 15 كيلو)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # جدول ترحيل الزراعة
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agriculture_transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shipment_name TEXT,
+                seller_name TEXT,
+                item_name TEXT,
+                unit_price REAL DEFAULT 0,
+                weight REAL DEFAULT 0,
+                count REAL DEFAULT 0,
+                equipment TEXT,
+                transfer_type TEXT, -- 'in' or 'out'
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # محاولة إضافة عمود transfer_type إذا لم يكن موجوداً
+        try:
+            cursor.execute('ALTER TABLE agriculture_transfers ADD COLUMN transfer_type TEXT')
+        except sqlite3.OperationalError:
+            pass
+        
+        # محاولة إضافة عمود count إذا لم يكن موجوداً (للنسخ القديمة من قاعدة البيانات)
+        try:
+            cursor.execute('ALTER TABLE agriculture_transfers ADD COLUMN count REAL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass # العمود موجود بالفعل
+
+        # جدول العدة
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS inventory_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                quantity INTEGER DEFAULT 0,
+                price REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # إضافة عمود السعر إذا لم يكن موجوداً (للتوافق مع قواعد البيانات القديمة)
+        try:
+            cursor.execute('ALTER TABLE inventory_items ADD COLUMN price REAL DEFAULT 0')
+        except sqlite3.OperationalError:
+            pass # العمود موجود بالفعل
+
         conn.commit()
         conn.close()
         print("تم تهيئة قاعدة البيانات بنجاح")
-    
+
+    # --- طرق التعامل مع العدة ---
+    def get_all_inventory(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name, quantity, price FROM inventory_items ORDER BY name')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def add_inventory_item(self, name, quantity, price=0):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('INSERT INTO inventory_items (name, quantity, price) VALUES (?, ?, ?)', (name, quantity, price))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+        finally:
+            conn.close()
+
+    def update_inventory_item(self, item_id, name, price):
+        """تحديث اسم وسعر العدة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE inventory_items SET name = ?, price = ? WHERE id = ?', (name, price, item_id))
+        conn.commit()
+        conn.close()
+
+    def update_inventory_quantity(self, item_id, change_amount):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE inventory_items SET quantity = quantity + ? WHERE id = ?', (change_amount, item_id))
+        conn.commit()
+        conn.close()
+
+    def delete_inventory_item(self, item_id):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM inventory_items WHERE id = ?', (item_id,))
+        conn.commit()
+        conn.close()
+
     def get_all_sellers_accounts(self):
         """جلب جميع حسابات البائعين"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, seller_name, remaining_amount, total_credit FROM sellers_accounts ORDER BY seller_name')
+        cursor.execute('SELECT id, seller_name, remaining_amount, total_credit, phone FROM sellers_accounts ORDER BY seller_name')
         results = cursor.fetchall()
         conn.close()
         return results
+
+    # --- حسابات العملاء ---
+    def add_client_debt(self, client_name, amount):
+        """إضافة دين على البرنامج لصالح العميل (ترحيل عميل)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # التأكد من وجود جدول العملاء
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clients_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL UNIQUE,
+                balance REAL DEFAULT 0,
+                phone TEXT
+            )
+        ''')
+        
+        # التحقق مما إذا كان العميل موجوداً
+        cursor.execute('SELECT id, balance FROM clients_accounts WHERE client_name = ?', (client_name,))
+        result = cursor.fetchone()
+        
+        if result:
+            # تحديث الرصيد (إضافة المبلغ للرصيد الحالي)
+            new_balance = result[1] + amount
+            cursor.execute('UPDATE clients_accounts SET balance = ? WHERE id = ?', (new_balance, result[0]))
+        else:
+            # إنشاء عميل جديد
+            cursor.execute('INSERT INTO clients_accounts (client_name, balance) VALUES (?, ?)', (client_name, amount))
+            
+        conn.commit()
+        conn.close()
+
+    def get_seller_by_name(self, name):
+        """البحث عن بائع بالاسم"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, seller_name, remaining_amount, total_credit FROM sellers_accounts WHERE seller_name = ?', (name,))
+        result = cursor.fetchone()
+        conn.close()
+        return result
+
     
-    def add_seller_account(self, seller_name, remaining_amount, total_credit):
+    def add_seller_account(self, seller_name, remaining_amount, total_credit, phone=""):
         """إضافة حساب بائع جديد"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO sellers_accounts (seller_name, remaining_amount, total_credit)
-            VALUES (?, ?, ?)
-        ''', (seller_name, remaining_amount, total_credit))
+            INSERT INTO sellers_accounts (seller_name, remaining_amount, total_credit, phone)
+            VALUES (?, ?, ?, ?)
+        ''', (seller_name, remaining_amount, total_credit, phone))
         conn.commit()
         conn.close()
     
@@ -179,3 +346,150 @@ class Database:
         conn.commit()
         conn.close()
 
+    # --- طرق التعامل مع معاملات البائعين ---
+
+    def get_seller_transactions(self, seller_id):
+        """جلب جميع معاملات بائع معين"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, amount, status, count, weight, price, item_name, date, day_name, equipment, note 
+            FROM seller_transactions 
+            WHERE seller_id = ? 
+            ORDER BY date DESC, id DESC
+        ''', (seller_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def add_seller_transaction(self, seller_id, amount, status, count, weight, price, item_name, date, day_name, equipment, note):
+        """إضافة معاملة جديدة لبائع"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO seller_transactions 
+            (seller_id, amount, status, count, weight, price, item_name, date, day_name, equipment, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (seller_id, amount, status, count, weight, price, item_name, date, day_name, equipment, note))
+        conn.commit()
+        conn.close()
+
+    def update_seller_transaction(self, trans_id, amount, status, count, weight, price, item_name, date, day_name, equipment, note):
+        """تحديث معاملة لبائع"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE seller_transactions 
+            SET amount=?, status=?, count=?, weight=?, price=?, item_name=?, date=?, day_name=?, equipment=?, note=?
+            WHERE id=?
+        ''', (amount, status, count, weight, price, item_name, date, day_name, equipment, note, trans_id))
+        conn.commit()
+        conn.close()
+
+    def delete_seller_transaction(self, trans_id):
+        """حذف معاملة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM seller_transactions WHERE id = ?', (trans_id,))
+        conn.commit()
+        conn.close()
+
+    # --- طرق التعامل مع الوجبات / الأصناف ---
+
+    def get_all_meals(self):
+        """جلب جميع الوجبات"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, name, price_per_kg, equipment_weight FROM meals ORDER BY name')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def add_meal(self, name, price, equipment_weight=0):
+        """إضافة وجبة جديدة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('INSERT INTO meals (name, price_per_kg, equipment_weight) VALUES (?, ?, ?)', (name, price, equipment_weight))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False # الاسم مكرر
+        finally:
+            conn.close()
+
+    def update_meal(self, meal_id, name, price, equipment_weight=0):
+        """تحديث بيانات وجبة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE meals 
+            SET name = ?, price_per_kg = ?, equipment_weight = ?
+            WHERE id = ?
+        ''', (name, price, equipment_weight, meal_id))
+        conn.commit()
+        conn.close()
+
+    def delete_meal(self, meal_id):
+        """حذف وجبة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM meals WHERE id = ?', (meal_id,))
+        conn.commit()
+        conn.close()
+
+    # --- طرق التعامل مع ترحيل الزراعة ---
+
+    def get_agriculture_transfers(self):
+        """جلب جميع بيانات ترحيل الزراعة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type FROM agriculture_transfers ORDER BY created_at DESC')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def add_agriculture_transfer(self, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type):
+        """إضافة سجل ترحيل زراعة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO agriculture_transfers (shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type))
+        conn.commit()
+        conn.close()
+
+    def update_agriculture_transfer(self, trans_id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type):
+        """تحديث سجل ترحيل زراعة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE agriculture_transfers 
+            SET shipment_name=?, seller_name=?, item_name=?, unit_price=?, weight=?, count=?, equipment=?, transfer_type=?
+            WHERE id=?
+        ''', (shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type, trans_id))
+        conn.commit()
+        conn.close()
+
+    def delete_agriculture_transfer(self, trans_id):
+        """حذف سجل ترحيل زراعة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM agriculture_transfers WHERE id = ?', (trans_id,))
+        conn.commit()
+        conn.close()
+
+    def get_sales_summary(self):
+        """جلب ملخص المبيعات (الصنف، إجمالي الوزن، إجمالي السعر)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # نفترض أن إجمالي السعر هو (سعر الوحدة * الوزن)
+        cursor.execute('''
+            SELECT item_name, SUM(weight), SUM(unit_price * weight) 
+            FROM agriculture_transfers 
+            GROUP BY item_name
+        ''')
+        results = cursor.fetchall()
+        conn.close()
+        return results
