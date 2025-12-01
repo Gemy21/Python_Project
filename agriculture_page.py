@@ -52,20 +52,9 @@ class AgricultureTransferPage:
         self.filter_item_var = tk.StringVar()
         self.global_price_var = tk.StringVar()
         
-        # Input Row Variables
-        self.in_seller_var = tk.StringVar()
-        self.in_shipment_var = tk.StringVar()
-        self.in_item_var = tk.StringVar()
-        self.in_price_var = tk.StringVar()
-        self.in_weight_var = tk.StringVar()
-        self.in_count_var = tk.StringVar()
-        
         # Load meal prices
         self.meal_prices = {}
         self.load_meal_prices()
-        
-        # Bind global price to input price
-        self.global_price_var.trace('w', self.update_input_price)
         
         self.table_rows = []
         self.selected_transfer_id = None
@@ -82,12 +71,9 @@ class AgricultureTransferPage:
         # --- Top Bar ---
         self.create_top_bar()
         
-        # --- Main Content (Table + Input) ---
+        # --- Main Content (Table) ---
         main_frame = tk.Frame(self.window, bg=self.colors['bg'])
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        
-        # Input Row (The "Entry" part of the table)
-        self.create_input_row(main_frame)
         
         # Table
         self.create_table(main_frame)
@@ -136,54 +122,6 @@ class AgricultureTransferPage:
         tk.Label(price_frame, text="سعر الوحدة (للمدخلات):", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
         price_entry = make_entry(price_frame, self.global_price_var, width=15)
         price_entry.pack(side=tk.RIGHT)
-        
-    def create_input_row(self, parent):
-        # This frame simulates the "New Entry" row
-        input_frame = tk.Frame(parent, bg='white', pady=10, padx=10, relief=tk.RAISED, bd=2)
-        input_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        tk.Label(input_frame, text="إدخال بيانات جديدة:", font=self.fonts['header'], bg='white', fg=self.colors['accent']).pack(anchor='e', pady=(0, 10))
-        
-        # Grid layout for inputs to match columns roughly
-        # Columns: Seller, Shipment, Item, Price, Weight, Count
-        # We will use pack side=RIGHT to mimic RTL flow
-        
-        def add_input(label, var, width=15, is_combo=False, combo_values=None):
-            f = tk.Frame(input_frame, bg='white')
-            f.pack(side=tk.RIGHT, padx=5, expand=True, fill=tk.X)
-            
-            tk.Label(f, text=label, font=self.fonts['label'], bg='white').pack(anchor='n')
-            
-            if is_combo:
-                w = ttk.Combobox(f, textvariable=var, values=combo_values, font=self.fonts['entry'], justify='center')
-            else:
-                w = tk.Entry(f, textvariable=var, font=self.fonts['entry'], justify='center', bg='#F8F9F9', relief=tk.SOLID, bd=1)
-                
-            w.pack(fill=tk.X, pady=5, ipady=5)
-            return w
-
-        # 1. Seller Name
-        add_input("اسم البائع", self.in_seller_var, width=20)
-        
-        # 2. Shipment Name (Auto Date)
-        ship_entry = add_input("اسم النقلة", self.in_shipment_var, width=20)
-        ship_entry.bind('<FocusOut>', self.append_date_to_shipment)
-        
-        # 3. Item
-        meals = self.db.get_all_meals()
-        meal_names = [m[1] for m in meals]
-        item_combo = add_input("الصنف", self.in_item_var, is_combo=True, combo_values=meal_names)
-        item_combo.bind('<<ComboboxSelected>>', self.on_item_selected)
-        
-        # 4. Unit Price (Editable, defaults to item price or global)
-        price_entry = add_input("سعر الوحدة", self.in_price_var, width=10)
-        # price_entry.config(state='readonly') # Removed to allow editing
-        
-        # 5. Weight
-        add_input("الوزن", self.in_weight_var, width=10)
-        
-        # 6. Count
-        add_input("العدد", self.in_count_var, width=10)
 
     def create_table(self, parent):
         table_frame = tk.Frame(parent, bg=self.colors['bg'])
@@ -246,10 +184,10 @@ class AgricultureTransferPage:
             
         # Buttons
         # 1. Transfer In (Client)
-        create_btn("ترحيل عميل", lambda: self.save_transfer('in'), self.colors['button_bg']).pack(side=tk.RIGHT, padx=20)
+        create_btn("ترحيل عميل", lambda: self.open_transfer_window('in'), self.colors['button_bg']).pack(side=tk.RIGHT, padx=20)
         
         # 2. Transfer Out (Seller)
-        create_btn("ترحيل بائع", lambda: self.save_transfer('out'), '#E74C3C').pack(side=tk.RIGHT, padx=20)
+        create_btn("ترحيل بائع", lambda: self.open_transfer_window('out'), '#E74C3C').pack(side=tk.RIGHT, padx=20)
         
         # 3. Items Statement
         create_btn("بيان الاصناف", self.show_summary, self.colors['text_secondary']).pack(side=tk.LEFT, padx=20)
@@ -257,111 +195,157 @@ class AgricultureTransferPage:
         # 4. Delete Button
         create_btn("حذف الترحيل", self.delete_selected_transfer, self.colors['button_bg']).pack(side=tk.LEFT, padx=20)
 
-    # --- Logic ---
-    
-    def update_input_price(self, *args):
-        # If global price is typed, it overrides everything
-        val = self.global_price_var.get()
-        if val:
-            self.in_price_var.set(val)
-            
-    def on_item_selected(self, event):
-        # If global price is empty, use item price
-        if not self.global_price_var.get():
-            item_name = self.in_item_var.get()
-            if item_name in self.meal_prices:
-                self.in_price_var.set(self.meal_prices[item_name])
+    def open_transfer_window(self, t_type):
+        title = "ترحيل عميل" if t_type == 'in' else "ترحيل بائع"
+        bg_color = self.colors['button_bg'] if t_type == 'in' else '#E74C3C'
         
-    def append_date_to_shipment(self, event=None):
-        val = self.in_shipment_var.get().strip()
-        if val:
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if today_str not in val:
-                self.in_shipment_var.set(f"{val} - {today_str}")
+        win = tk.Toplevel(self.window)
+        win.title(title)
+        win.geometry("500x600")
+        win.configure(bg=self.colors['bg'])
+        
+        # Header
+        tk.Label(win, text=title, font=self.fonts['header'], bg=self.colors['bg'], fg=bg_color).pack(pady=20)
+        
+        # Form Frame
+        form_frame = tk.Frame(win, bg=self.colors['bg'])
+        form_frame.pack(fill=tk.BOTH, expand=True, padx=40)
+        
+        # Local Variables
+        v_seller = tk.StringVar()
+        v_shipment = tk.StringVar()
+        v_item = tk.StringVar()
+        v_price = tk.StringVar()
+        v_weight = tk.StringVar()
+        v_count = tk.StringVar()
+        
+        # Helper to create fields
+        def add_field(label, var, is_combo=False, values=None, editable=True):
+            f = tk.Frame(form_frame, bg=self.colors['bg'])
+            f.pack(fill=tk.X, pady=5)
+            tk.Label(f, text=label, font=self.fonts['label'], bg=self.colors['bg']).pack(side=tk.RIGHT)
+            if is_combo:
+                w = ttk.Combobox(f, textvariable=var, values=values, font=self.fonts['entry'], justify='center')
+                if not editable:
+                    w.config(state='readonly')
+            else:
+                w = tk.Entry(f, textvariable=var, font=self.fonts['entry'], justify='center')
+                if not editable:
+                    w.config(state='readonly')
+            w.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+            return w
 
-    def save_transfer(self, t_type):
-        # Validate
-        seller = self.in_seller_var.get().strip()
-        shipment = self.in_shipment_var.get().strip()
-        item = self.in_item_var.get().strip()
-        price = self.in_price_var.get().strip()
-        weight = self.in_weight_var.get().strip()
-        count = self.in_count_var.get().strip()
+        # Get names based on transfer type
+        if t_type == 'in':  # Client Transfer
+            # Get client names
+            clients = self.db.get_all_clients_accounts()
+            client_names = [c[1] for c in clients]  # c[1] is client_name
+            
+            # Client name selector
+            seller_combo = add_field("اسم العميل", v_seller, is_combo=True, values=client_names, editable=False)
+            
+            # Shipment name = Client name (auto-filled, read-only)
+            ship_entry = add_field("اسم النقلة", v_shipment, editable=False)
+            
+            # When client is selected, auto-fill shipment name
+            def on_client_select(e):
+                client_name = v_seller.get()
+                if client_name:
+                    v_shipment.set(client_name)
+            seller_combo.bind('<<ComboboxSelected>>', on_client_select)
+            
+        else:  # Seller Transfer
+            # Get seller names
+            sellers = self.db.get_all_sellers_accounts()
+            seller_names = [s[1] for s in sellers]  # s[1] is seller_name
+            
+            # Seller name selector
+            add_field("اسم البائع", v_seller, is_combo=True, values=seller_names, editable=False)
+            
+            # Get shipment names
+            shipment_names = self.db.get_unique_shipment_names()
+            
+            # Shipment name selector (from existing shipments)
+            add_field("اسم النقلة", v_shipment, is_combo=True, values=shipment_names, editable=True)
         
-        if not (seller and shipment and item):
-            messagebox.showwarning("تنبيه", "الرجاء إدخال البيانات الأساسية (البائع، النقلة، الصنف)")
-            return
+        meals = self.db.get_all_meals()
+        meal_names = [m[1] for m in meals]
+        item_combo = add_field("الصنف", v_item, is_combo=True, values=meal_names, editable=False)
+        
+        # Price logic
+        def on_item_select(e):
+            name = v_item.get()
+            # Check global price first
+            g_price = self.global_price_var.get()
+            if g_price:
+                v_price.set(g_price)
+            elif name in self.meal_prices:
+                v_price.set(self.meal_prices[name])
+        item_combo.bind('<<ComboboxSelected>>', on_item_select)
+        
+        add_field("سعر الوحدة", v_price)
+        add_field("الوزن", v_weight)
+        add_field("العدد", v_count)
+        
+        # Save Button
+        def save():
+            seller = v_seller.get().strip()
+            shipment = v_shipment.get().strip()
+            item = v_item.get().strip()
+            price = v_price.get().strip()
+            weight = v_weight.get().strip()
+            count = v_count.get().strip()
             
-        try:
-            price_val = float(price) if price else 0.0
-            weight_val = float(weight) if weight else 0.0
-            count_val = float(count) if count else 0.0
-            
-            # 1. Add to Agriculture Transfers
-            self.db.add_agriculture_transfer(
-                shipment, seller, item, price_val, weight_val, count_val, "", t_type
-            )
-            
-            msg = ""
-            if t_type == 'out': # Seller Transfer (ترحيل بائع)
-                # Add to Seller's Account
-                seller_data = self.db.get_seller_by_name(seller)
-                if seller_data:
-                    seller_id = seller_data[0]
-                    
-                    # Calculate Amount
-                    amount = 0.0
-                    if weight_val > 0:
-                        amount = weight_val * price_val
-                    elif count_val > 0:
-                        amount = count_val * price_val
-                        
-                    t_type_str = "خارج"
-                    note = f"ترحيل زراعة ({t_type_str}) - {shipment}"
-                    today_date = datetime.now().strftime("%Y-%m-%d")
-                    
-                    # Add Transaction
-                    self.db.add_seller_transaction(
-                        seller_id, 
-                        amount, 
-                        "متبقي", 
-                        count_val, 
-                        weight_val, 
-                        price_val, 
-                        item, 
-                        today_date, 
-                        "", 
-                        "", 
-                        note
-                    )
-                    msg = "تم الترحيل وإضافة المعاملة لحساب البائع"
-                else:
-                    msg = "تم الترحيل ولكن لم يتم العثور على حساب للبائع"
-                    
-            elif t_type == 'in': # Client Transfer (ترحيل عميل)
-                # Add to Client's Account (Debt)
-                # Calculate Amount
-                amount = 0.0
-                if weight_val > 0:
-                    amount = weight_val * price_val
-                elif count_val > 0:
-                    amount = count_val * price_val
-                    
-                self.db.add_client_debt(seller, amount)
-                msg = "تم الترحيل وإضافة المبلغ لحساب العميل"
+            if not (seller and shipment and item):
+                messagebox.showwarning("تنبيه", "الرجاء إدخال البيانات الأساسية", parent=win)
+                return
                 
-            messagebox.showinfo("نجاح", msg)
-            
-            # Clear inputs
-            self.in_seller_var.set("")
-            self.in_item_var.set("")
-            self.in_weight_var.set("")
-            self.in_count_var.set("")
-            
-            self.load_data()
-            
-        except ValueError:
-            messagebox.showerror("خطأ", "الرجاء إدخال قيم رقمية صحيحة")
+            try:
+                price_val = float(price) if price else 0.0
+                weight_val = float(weight) if weight else 0.0
+                count_val = float(count) if count else 0.0
+                
+                # Add to Agriculture Transfers
+                self.db.add_agriculture_transfer(
+                    shipment, seller, item, price_val, weight_val, count_val, "", t_type
+                )
+                
+                msg = ""
+                if t_type == 'out': # Seller
+                    seller_data = self.db.get_seller_by_name(seller)
+                    if seller_data:
+                        seller_id = seller_data[0]
+                        amount = 0.0
+                        if weight_val > 0: amount = weight_val * price_val
+                        elif count_val > 0: amount = count_val * price_val
+                            
+                        note = f"ترحيل زراعة (خارج) - {shipment}"
+                        today_date = datetime.now().strftime("%Y-%m-%d")
+                        
+                        self.db.add_seller_transaction(
+                            seller_id, amount, "متبقي", count_val, weight_val, price_val, 
+                            item, today_date, "", "", note
+                        )
+                        msg = "تم الترحيل وإضافة المعاملة لحساب البائع"
+                    else:
+                        msg = "تم الترحيل ولكن لم يتم العثور على حساب للبائع"
+                        
+                elif t_type == 'in': # Client
+                    amount = 0.0
+                    if weight_val > 0: amount = weight_val * price_val
+                    elif count_val > 0: amount = count_val * price_val
+                        
+                    self.db.add_client_debt(seller, amount)
+                    msg = "تم الترحيل وإضافة المبلغ لحساب العميل"
+                    
+                messagebox.showinfo("نجاح", msg, parent=win)
+                win.destroy()
+                self.load_data()
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال قيم رقمية صحيحة", parent=win)
+
+        tk.Button(win, text="حفظ الترحيل", command=save, font=self.fonts['button'], bg=bg_color, fg='white', width=20).pack(pady=20)
 
     def load_data(self):
         # Clear current rows
@@ -390,7 +374,6 @@ class AgricultureTransferPage:
             
             filtered_data.append(row)
             
-        # Create Rows
         # Create Rows
         entry_style = {'font': ('Playpen Sans Arabic', 14), 'relief': tk.SUNKEN, 'bd': 1, 'justify': 'center'}
         
@@ -549,13 +532,11 @@ class AgricultureTransferPage:
         
         for idx, row in enumerate(summary_data):
             # row: item_name, total_weight, total_price
-            # نحتاج أيضاً إلى العدد، سنحصل عليه من قاعدة البيانات
             item_name = row[0]
             total_weight = row[1]
             total_price = row[2]
             
-            # الحصول على إجمالي العدد لهذا الصنف
-            total_count = self.db.get_item_total_count(item_name)
+            total_count = 0 # Placeholder
             
             tag = 'evenrow' if idx % 2 == 0 else 'oddrow'
             tree.insert('', tk.END, values=(

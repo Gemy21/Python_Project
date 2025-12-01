@@ -221,8 +221,8 @@ class StartMenu:
 
     def open_collection_program(self):
         """فتح برنامج التحصيل والمنصرف"""
-        print("فتح برنامج التحصيل والمنصرف")
-        # سيتم تنفيذها لاحقاً
+        from collection_page import CollectionPage
+        CollectionPage(self.root)
 
     def open_accounts_module(self):
         """فتح قسم الحسابات"""
@@ -677,8 +677,81 @@ class StartMenu:
 
     def open_add_expense(self):
         """إضافة منصرف جديد"""
-        print("إضافة منصرف جديد")
-        # سيتم تنفيذها لاحقاً
+        # إنشاء نافذة فرعية
+        exp_window = tk.Toplevel(self.root)
+        exp_window.title("إضافة منصرف")
+        exp_window.geometry("400x400")
+        exp_window.configure(bg=self.colors['pink'])
+        
+        # توسيط النافذة
+        exp_window.update_idletasks()
+        x = (exp_window.winfo_screenwidth() // 2) - 200
+        y = (exp_window.winfo_screenheight() // 2) - 200
+        exp_window.geometry(f"400x400+{x}+{y}")
+        
+        # العنوان
+        tk.Label(exp_window, text="تسجيل مصروف جديد", font=('Playpen Sans Arabic', 16, 'bold'), 
+                 bg=self.colors['pink'], fg=self.colors['red']).pack(pady=15)
+        
+        form = tk.Frame(exp_window, bg=self.colors['pink'])
+        form.pack(pady=10)
+        
+        # Description
+        tk.Label(form, text="بيان المصروف:", font=('Arial', 12, 'bold'), bg=self.colors['pink']).grid(row=0, column=1, padx=5, pady=10, sticky='e')
+        entry_desc = tk.Entry(form, font=('Arial', 12), justify='right', width=25)
+        entry_desc.grid(row=0, column=0, padx=5, pady=10)
+        entry_desc.focus()
+        
+        # Amount
+        tk.Label(form, text="المبلغ:", font=('Arial', 12, 'bold'), bg=self.colors['pink']).grid(row=1, column=1, padx=5, pady=10, sticky='e')
+        entry_amount = tk.Entry(form, font=('Arial', 14), justify='center', width=25)
+        entry_amount.grid(row=1, column=0, padx=5, pady=10)
+        
+        # Note
+        tk.Label(form, text="ملاحظات:", font=('Arial', 12, 'bold'), bg=self.colors['pink']).grid(row=2, column=1, padx=5, pady=10, sticky='e')
+        entry_note = tk.Entry(form, font=('Arial', 12), justify='right', width=25)
+        entry_note.grid(row=2, column=0, padx=5, pady=10)
+        
+        def save_expense():
+            desc = entry_desc.get().strip()
+            amount_str = entry_amount.get().strip()
+            note = entry_note.get().strip()
+            
+            if not desc:
+                messagebox.showwarning("تنبيه", "الرجاء إدخال بيان المصروف", parent=exp_window)
+                return
+            if not amount_str:
+                messagebox.showwarning("تنبيه", "الرجاء إدخال المبلغ", parent=exp_window)
+                return
+                
+            try:
+                amount = float(amount_str)
+                from datetime import datetime
+                today = datetime.now().strftime("%Y-%m-%d")
+                
+                from database import Database
+                db = Database()
+                db.add_expense(desc, amount, today, note)
+                
+                messagebox.showinfo("نجاح", "تم تسجيل المصروف بنجاح", parent=exp_window)
+                exp_window.destroy()
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال مبلغ صحيح", parent=exp_window)
+                
+        # زر الحفظ
+        btn_style = {
+            'font': ('Playpen Sans Arabic', 14, 'bold'),
+            'bg': '#000000',
+            'fg': 'white',
+            'relief': tk.SOLID,
+            'bd': 2,
+            'cursor': 'hand2',
+            'width': 15
+        }
+        
+        tk.Button(exp_window, text="حفظ المصروف", command=save_expense, **btn_style).pack(pady=20)
+        exp_window.bind('<Return>', lambda e: save_expense())
 
 
 def main():

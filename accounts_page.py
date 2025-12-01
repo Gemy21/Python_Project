@@ -176,18 +176,18 @@ class AccountsPage:
         center_buttons_holder = tk.Frame(self.bottom_buttons_frame, bg=self.colors['window_bg'])
         center_buttons_holder.pack()
         
-        self.customer_income_btn = tk.Button(
-            center_buttons_holder,
-            text="وارد العملاء",
-            command=self.open_customer_income,
-            **bottom_buttons_style
-        )
-        self.customer_income_btn.pack(side=tk.LEFT, padx=15)
+        # self.customer_income_btn = tk.Button(
+        #     center_buttons_holder,
+        #     text="وارد العملاء",
+        #     command=self.open_customer_income,
+        #     **bottom_buttons_style
+        # )
+        # self.customer_income_btn.pack(side=tk.LEFT, padx=15)
         
         self.arrears_btn = tk.Button(
             center_buttons_holder,
-            text="متأخرات",
-            command=self.open_arrears,
+            text="متاخرات",
+            command=self.open_arrears_window,
             **bottom_buttons_style
         )
         self.arrears_btn.pack(side=tk.LEFT, padx=15)
@@ -199,7 +199,8 @@ class AccountsPage:
 
     def load_data(self):
         """تحميل البيانات من قاعدة البيانات"""
-        self.all_accounts = self.db.get_all_sellers_accounts()
+        # استخدام الدالة الجديدة لجلب الأرصدة المحسوبة
+        self.all_accounts = self.db.get_sellers_with_balances()
         self.filter_data("")
 
     def filter_data(self, query):
@@ -207,6 +208,7 @@ class AccountsPage:
         # مسح الجدول
         for row_entries in self.table_rows:
             for i, entry in enumerate(row_entries):
+                entry.config(state='normal') # تمكين التعديل للمسح
                 entry.delete(0, tk.END)
                 entry.config(bg=self.column_colors[i]) # إعادة اللون الأصلي
                 if hasattr(row_entries[0], 'account_id'):
@@ -216,7 +218,7 @@ class AccountsPage:
         # تصفية البيانات
         filtered_accounts = []
         for acc in self.all_accounts:
-            # acc: id, seller_name, remaining, credit, phone
+            # acc: id, seller_name, calculated_remaining, calculated_allowance, phone
             name = acc[1]
             if query in name.lower():
                 filtered_accounts.append(acc)
@@ -232,11 +234,17 @@ class AccountsPage:
             row_entries[0].seller_name = account[1]
             
             # ملء الخانات
-            # ملء الخانات
-            row_entries[0].insert(0, str(account[3])) # اجمالي السماح
-            row_entries[1].insert(0, str(account[2])) # المتبقي
+            # اجمالي السماح (calculated_allowance)
+            row_entries[0].insert(0, str(account[3])) 
+            row_entries[0].config(state='readonly')
             
-            row_entries[2].insert(0, account[1]) # الاسم
+            # المتبقي (calculated_remaining)
+            row_entries[1].insert(0, str(account[2])) 
+            row_entries[1].config(state='readonly')
+            
+            # الاسم
+            row_entries[2].insert(0, account[1]) 
+            row_entries[2].config(state='readonly')
 
     def select_row_event(self, event, row_entries):
         """معالجة حدث النقر على الصف"""
@@ -286,29 +294,10 @@ class AccountsPage:
     
     def save_all_data(self):
         """حفظ جميع البيانات من الصفوف إلى قاعدة البيانات"""
-        # حذف جميع الحسابات الحالية
-        accounts = self.db.get_all_sellers_accounts()
-        for account in accounts:
-            account_id = account[0]
-            self.db.delete_seller_account(account_id)
-        
-        # إضافة البيانات الجديدة من الصفوف
-        for row_entries in self.table_rows:
-            # اجمالي السماح (العمود الأول)
-            total_credit_str = row_entries[0].get().strip()
-            # المتبقي (العمود الثاني)
-            remaining_str = row_entries[1].get().strip()
-            # اسم البائع (العمود الثالث)
-            seller_name = row_entries[2].get().strip()
-            
-            # إذا كان هناك اسم بائع، احفظ البيانات
-            if seller_name:
-                try:
-                    remaining = float(remaining_str) if remaining_str else 0.0
-                    total_credit = float(total_credit_str) if total_credit_str else 0.0
-                    self.db.add_seller_account(seller_name, remaining, total_credit, "")
-                except ValueError:
-                    pass  # تجاهل الأخطاء في الأرقام
+        # تم تعطيل الحفظ لأن الجدول الآن يعرض قيم محسوبة ديناميكياً
+        # ولا يجب حفظها كقيم ثابتة في قاعدة البيانات لتجنب الازدواجية
+        messagebox.showwarning("تنبيه", "لا يمكن حفظ التعديلات من هذا الجدول مباشرة. الرجاء استخدام المعاملات المالية.")
+        return
     
     # وظائف الأزرار الإضافية
     def open_current_account(self):
@@ -327,8 +316,84 @@ class AccountsPage:
     def open_customer_income(self):
         messagebox.showinfo("وارد العملاء", "سيتم تطوير شاشة وارد العملاء لاحقاً.")
     
-    def open_arrears(self):
-        messagebox.showinfo("متأخرات", "سيتم تطوير شاشة المتأخرات لاحقاً.")
+    def open_arrears_window(self):
+        """فتح نافذة المتأخرات"""
+        arrears_win = tk.Toplevel(self.window)
+        arrears_win.title("المتأخرات")
+        arrears_win.geometry("600x700")
+        arrears_win.configure(bg=self.colors['window_bg'])
+        
+        # Header
+        tk.Label(
+            arrears_win, 
+            text="قائمة المتأخرات (البائعين)", 
+            font=('Playpen Sans Arabic', 18, 'bold'),
+            bg=self.colors['header_bg'],
+            fg='white'
+        ).pack(fill=tk.X, pady=10)
+        
+        # Table Frame
+        table_frame = tk.Frame(arrears_win, bg=self.colors['window_bg'])
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Headers
+        headers = ['المبلغ المتبقي', 'اسم البائع']
+        header_colors = [self.colors['col_remain'], self.colors['col_name']]
+        
+        for i, text in enumerate(headers):
+            tk.Label(
+                table_frame,
+                text=text,
+                font=('Playpen Sans Arabic', 14, 'bold'),
+                bg=header_colors[i],
+                relief=tk.RAISED,
+                bd=2,
+                width=20
+            ).grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
+            table_frame.grid_columnconfigure(i, weight=1)
+            
+        # Data
+        sellers = self.db.get_sellers_with_balances()
+        row_idx = 1
+        
+        for seller in sellers:
+            # seller: id, name, remaining, allowance, phone
+            name = seller[1]
+            remaining = seller[2]
+            
+            if remaining != 0:
+                # Remaining
+                tk.Label(
+                    table_frame,
+                    text=f"{remaining:.2f}",
+                    font=('Arial', 14, 'bold'),
+                    bg=self.colors['col_remain'],
+                    relief=tk.SUNKEN,
+                    bd=1
+                ).grid(row=row_idx, column=0, sticky='nsew', padx=1, pady=1, ipady=5)
+                
+                # Name
+                tk.Label(
+                    table_frame,
+                    text=name,
+                    font=('Playpen Sans Arabic', 14, 'bold'),
+                    bg=self.colors['col_name'],
+                    relief=tk.SUNKEN,
+                    bd=1
+                ).grid(row=row_idx, column=1, sticky='nsew', padx=1, pady=1, ipady=5)
+                
+                row_idx += 1
+        
+        # Close Button
+        tk.Button(
+            arrears_win,
+            text="إغلاق",
+            command=arrears_win.destroy,
+            font=('Playpen Sans Arabic', 12, 'bold'),
+            bg=self.colors['btn_bg'],
+            fg='white',
+            width=15
+        ).pack(pady=20)
 
 
 class AccountDialog:

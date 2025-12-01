@@ -189,6 +189,18 @@ class Database:
             )
         ''')
         
+        # جدول المنصرفات
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                description TEXT NOT NULL,
+                amount REAL NOT NULL,
+                expense_date DATE NOT NULL,
+                note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # محاولة إضافة عمود transfer_type إذا لم يكن موجوداً
         try:
             cursor.execute('ALTER TABLE agriculture_transfers ADD COLUMN transfer_type TEXT')
@@ -274,6 +286,48 @@ class Database:
         conn.close()
         return results
 
+    def get_sellers_with_balances(self):
+        """جلب حسابات البائعين مع الأرصدة المحسوبة من المعاملات"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # استعلام لجلب البيانات وحساب المجاميع
+        # نفترض أن remaining_amount في جدول sellers_accounts هو الرصيد الافتتاحي
+        query = '''
+            SELECT 
+                s.id, 
+                s.seller_name, 
+                s.remaining_amount, -- الرصيد الافتتاحي
+                s.phone,
+                (SELECT SUM(amount) FROM seller_transactions WHERE seller_id = s.id AND status != 'مدفوع') as total_goods,
+                (SELECT SUM(amount) FROM seller_transactions WHERE seller_id = s.id AND status = 'مدفوع') as total_paid,
+                (SELECT SUM(amount) FROM seller_transactions WHERE seller_id = s.id AND item_name LIKE '%سماح%') as total_allowance
+            FROM sellers_accounts s
+            ORDER BY s.seller_name
+        '''
+        cursor.execute(query)
+        results = cursor.fetchall()
+        conn.close()
+        
+        processed_results = []
+        for row in results:
+            s_id = row[0]
+            name = row[1]
+            initial_balance = row[2] or 0.0
+            phone = row[3]
+            total_goods = row[4] or 0.0
+            total_paid = row[5] or 0.0
+            total_allowance = row[6] or 0.0
+            
+            # حساب المتبقي النهائي
+            # المتبقي = الرصيد الافتتاحي + البضاعة - المدفوعات (شاملة السماح)
+            final_remaining = initial_balance + total_goods - total_paid
+            
+            # التنسيق: id, name, calculated_remaining, calculated_allowance, phone
+            processed_results.append((s_id, name, final_remaining, total_allowance, phone))
+            
+        return processed_results
+
     # --- حسابات العملاء ---
     def add_client_debt(self, client_name, amount):
         """إضافة دين على البرنامج لصالح العميل (ترحيل عميل)"""
@@ -304,6 +358,32 @@ class Database:
             
         conn.commit()
         conn.close()
+
+    def get_all_clients_accounts(self):
+        """جلب جميع حسابات العملاء"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clients_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL UNIQUE,
+                balance REAL DEFAULT 0,
+                phone TEXT
+            )
+        ''')
+        cursor.execute('SELECT id, client_name, balance, phone FROM clients_accounts ORDER BY client_name')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def get_unique_shipment_names(self):
+        """جلب أسماء النقلات الفريدة من جدول ترحيل الزراعة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT shipment_name FROM agriculture_transfers WHERE shipment_name IS NOT NULL AND shipment_name != "" ORDER BY shipment_name')
+        results = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in results]
 
     def get_seller_by_name(self, name):
         """البحث عن بائع بالاسم"""
@@ -493,3 +573,45 @@ class Database:
         results = cursor.fetchall()
         conn.close()
         return results
+
+    # --- طرق التعامل مع المنصرفات ---
+
+    def get_all_expenses(self):
+        """جلب جميع المنصرفات"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, description, amount, expense_date, note FROM expenses ORDER BY expense_date DESC, id DESC')
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def add_expense(self, description, amount, expense_date, note=""):
+        """إضافة منصرف جديد"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO expenses (description, amount, expense_date, note)
+            VALUES (?, ?, ?, ?)
+        ''', (description, amount, expense_date, note))
+        conn.commit()
+        conn.close()
+
+    def update_expense(self, expense_id, description, amount, expense_date, note=""):
+        """تحديث منصرف"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE expenses 
+            SET description = ?, amount = ?, expense_date = ?, note = ?
+            WHERE id = ?
+        ''', (description, amount, expense_date, note, expense_id))
+        conn.commit()
+        conn.close()
+
+    def delete_expense(self, expense_id):
+        """حذف منصرف"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM expenses WHERE id = ?', (expense_id,))
+        conn.commit()
+        conn.close()
