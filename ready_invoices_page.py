@@ -5,7 +5,7 @@ from utils import ColorManager
 from datetime import datetime
 
 class ReadyInvoicesPage:
-    def __init__(self, parent_window, transfer_data=None):
+    def __init__(self, parent_window, transfer_data=None, deductions=None):
         self.db = Database()
         self.color_manager = ColorManager()
         self.theme = self.color_manager.get_random_theme()
@@ -31,6 +31,7 @@ class ReadyInvoicesPage:
         ]
         
         self.transfer_data = transfer_data  # Data from selected transfer
+        self.deductions = deductions or {}  # Deductions data
         
         self.window = tk.Toplevel(parent_window)
         self.window.title("فاتورة عميل جاهزة")
@@ -126,10 +127,62 @@ class ReadyInvoicesPage:
             
             self.entries.append(widget)
         
-        # Large empty space (orange area)
-        empty_space = tk.Frame(self.window, bg=self.colors['bg'], height=300)
-        empty_space.pack(fill=tk.BOTH, expand=True, padx=20)
+        # Large empty space (orange area) - replaced with Summary Section
+        summary_frame = tk.Frame(self.window, bg=self.colors['bg'])
+        summary_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
+        # Calculate totals if data exists
+        if self.transfer_data and self.deductions:
+            try:
+                net_amount = float(self.transfer_data[5])
+                
+                nolon = float(self.deductions.get('nolon', 0))
+                mashal = float(self.deductions.get('mashal', 0))
+                rent = float(self.deductions.get('rent', 0))
+                cash = float(self.deductions.get('cash', 0))
+                
+                comm_str = str(self.deductions.get('commission', "0"))
+                if '%' in comm_str:
+                    comm_pct = float(comm_str.replace('%', '').strip())
+                    commission = (net_amount * comm_pct) / 100
+                    comm_display = f"{commission:.2f} ({comm_str})"
+                else:
+                    commission = float(comm_str)
+                    comm_display = f"{commission:.2f}"
+                
+                total_deductions = nolon + commission + mashal + rent + cash
+                final_total = net_amount - total_deductions
+                
+                # Display Summary
+                # Frame for deductions
+                deductions_frame = tk.LabelFrame(summary_frame, text="تفاصيل الخصومات", font=self.fonts['label'], bg=self.colors['bg'], fg='black', padx=10, pady=10)
+                deductions_frame.pack(fill=tk.X, pady=10)
+                
+                deductions_data = [
+                    ("نولون", nolon),
+                    ("عمولة", comm_display),
+                    ("مشال", mashal),
+                    ("إيجار عدة", rent),
+                    ("نقدية", cash),
+                    ("إجمالي الخصم", total_deductions)
+                ]
+                
+                for i, (label, value) in enumerate(deductions_data):
+                    f = tk.Frame(deductions_frame, bg=self.colors['bg'])
+                    f.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+                    
+                    tk.Label(f, text=label, font=('Arial', 12, 'bold'), bg=self.colors['bg']).pack()
+                    tk.Label(f, text=str(value), font=('Arial', 14), bg='white', relief=tk.SUNKEN, width=10).pack(pady=5)
+                
+                # Final Total
+                total_frame = tk.Frame(summary_frame, bg=self.colors['bg'], pady=20)
+                total_frame.pack(fill=tk.X)
+                
+                tk.Label(total_frame, text=f"الصافي النهائي: {final_total:.2f} جنيه", font=('Playpen Sans Arabic', 24, 'bold'), bg='#27AE60', fg='white', padx=20, pady=10, relief=tk.RAISED).pack()
+                
+            except ValueError:
+                pass
+
         # --- Bottom Blue Bar ---
         bottom_bar = tk.Frame(self.window, bg=self.colors['blue_bar'], height=60)
         bottom_bar.pack(fill=tk.X, side=tk.BOTTOM)
@@ -473,12 +526,19 @@ class ReadyInvoicesPage:
             mid_frame.grid_columnconfigure(i, weight=1, uniform='field')
         
         # Fields
+        # Get defaults from self.deductions if available
+        nolon_def = str(self.deductions.get('nolon', "0"))
+        comm_def = str(self.deductions.get('commission', "0"))
+        mashal_def = str(self.deductions.get('mashal', "0"))
+        rent_def = str(self.deductions.get('rent', "0"))
+        cash_def = str(self.deductions.get('cash', "0"))
+
         fields_config = [
-            ("نولون", "0"),
-            ("العمولة", "0"),
-            ("مشال", "0"),
-            ("ايجار عد", "0"),
-            ("نقديه", "0")
+            ("نولون", nolon_def),
+            ("العمولة", comm_def),
+            ("مشال", mashal_def),
+            ("ايجار عد", rent_def),
+            ("نقديه", cash_def)
         ]
         
         invoice_entries = {}

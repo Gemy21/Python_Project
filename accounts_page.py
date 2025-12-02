@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from database import Database
 from utils import ColorManager
+from datetime import datetime, timedelta
 
 class AccountsPage:
     def __init__(self, parent_window):
@@ -356,12 +357,41 @@ class AccountsPage:
         sellers = self.db.get_sellers_with_balances()
         row_idx = 1
         
+        overdue_sellers = []
+        today = datetime.now()
+        
         for seller in sellers:
             # seller: id, name, remaining, allowance, phone
+            s_id = seller[0]
             name = seller[1]
             remaining = seller[2]
             
-            if remaining != 0:
+            if remaining > 0: # فقط من عليهم مبالغ (مدينون)
+                # التحقق من المتأخرات (مرور أسبوع دون دفع)
+                last_payment_date_str = self.db.get_last_payment_date(s_id)
+                is_overdue = False
+                
+                if last_payment_date_str:
+                    try:
+                        last_payment = datetime.strptime(last_payment_date_str, "%Y-%m-%d")
+                        if (today - last_payment).days >= 7:
+                            is_overdue = True
+                    except ValueError:
+                        pass
+                else:
+                    # لم يدفع أبداً، نتحقق من تاريخ آخر معاملة (بداية الدين)
+                    last_trans_date_str = self.db.get_last_transaction_date(s_id)
+                    if last_trans_date_str:
+                        try:
+                            last_trans = datetime.strptime(last_trans_date_str, "%Y-%m-%d")
+                            if (today - last_trans).days >= 7:
+                                is_overdue = True
+                        except ValueError:
+                            pass
+                
+                if is_overdue:
+                    overdue_sellers.append(f"- {name}: {remaining:.2f}")
+
                 # Remaining
                 tk.Label(
                     table_frame,
@@ -383,6 +413,12 @@ class AccountsPage:
                 ).grid(row=row_idx, column=1, sticky='nsew', padx=1, pady=1, ipady=5)
                 
                 row_idx += 1
+        
+        # إشعار بالمتأخرات
+        if overdue_sellers:
+            message = "تنبيه: البائعين التاليين لم يقوموا بالدفع منذ أسبوع أو أكثر:\n\n"
+            message += "\n".join(overdue_sellers)
+            messagebox.showwarning("تنبيه متأخرات", message, parent=arrears_win)
         
         # Close Button
         tk.Button(
@@ -621,8 +657,12 @@ class CurrentAccountPage:
             ("طباعة", self.print_invoice, '#2C3E50'),
             ("إضافة دفع", self.open_add_payment_dialog, '#C0392B'),
             ("تعديل الدفع", self.edit_payment, '#2980B9'),
+            ("تعديل وجبة", self.edit_meal, '#27AE60'),
             ("تحصيل عدة", self.collect_equipment, '#8E44AD')
         ]
+        
+        self.selected_trans_id = None
+        self.selected_row_widgets = []
         
         for text, cmd, color in btns:
             tk.Button(buttons_container, text=text, command=cmd, bg=color, **btn_style_base).pack(side=tk.LEFT, padx=3)
@@ -775,7 +815,9 @@ class CurrentAccountPage:
         dialog.bind('<Return>', lambda e: confirm_equipment())
         dialog.bind('<Escape>', lambda e: dialog.destroy())
     
-    def edit_meal(self): messagebox.showinfo("تعديل", "يمكنك التعديل مباشرة في الجدول ثم الضغط على حفظ")
+    def edit_meal(self):
+        """فتح نافذة إدارة الوجبات/الأصناف"""
+        MealsManagerWindow(self.window, self.db, self.colors)
     
     def edit_payment(self):
         """فتح نافذة تعديل الدفع"""
@@ -1318,21 +1360,23 @@ class CurrentAccountPage:
         fg_color = 'black'
         font_style = ('Arial', 12)
         
+        trans_id = None
+        
         if row_type == 'normal' and data:
             # data: id, amount, status, count, weight, price, item_name, date, day_name, equipment, note
-            # New mapping: Equipment, Date, Item, Price, Weight, Count, Status, Amount
+            trans_id = data[0]
             vals = [
                 data[9], data[7], data[6], 
                 data[5], data[4], data[3], data[2], data[1]
             ]
         elif row_type == 'paid' and data:
-            # data: id, amount, status, ...
+            trans_id = data[0]
             vals = ["", data[7], "دفعة نقدية", "", "", "", "مدفوع", data[1]]
             bg_color = '#E74C3C' # Red
             fg_color = 'white'
             
         elif row_type == 'discount' and data:
-            # data: id, amount, status, ...
+            trans_id = data[0]
             vals = ["", data[7], "سماح", "", "", "", "سماح", data[1]]
             bg_color = '#2ECC71' # Green
             fg_color = 'white'
@@ -1379,9 +1423,45 @@ class CurrentAccountPage:
             widget = tk.Entry(self.scrollable_frame, font=font_style, relief=tk.FLAT, justify='center', bg=cell_bg, fg=cell_fg)
             widget.insert(0, str(vals[col]) if vals[col] is not None else "")
             widget.grid(row=row_idx, column=col, padx=1, pady=1, sticky='nsew', ipady=8)
+            
+            # Store original background for selection highlighting
+            widget.orig_bg = cell_bg
+            
+            # Bind click event for selection if it's a transaction row
+            if trans_id:
+                widget.bind('<Button-1>', lambda e, tid=trans_id: self.on_row_click(e, tid))
+            
             entries.append(widget)
             
+        if entries:
+            entries[0].trans_id = trans_id
+            
         self.rows.append(entries)
+
+    def on_row_click(self, event, trans_id):
+        """تحديد الصف عند النقر عليه"""
+        self.selected_trans_id = trans_id
+        
+        # إعادة تعيين ألوان الصفوف السابقة
+        if hasattr(self, 'selected_row_widgets') and self.selected_row_widgets:
+            for w in self.selected_row_widgets:
+                if hasattr(w, 'orig_bg'):
+                    w.config(bg=w.orig_bg)
+        
+        # تحديد الصف الجديد (نبحث عنه في self.rows)
+        # بما أننا لا نملك مرجعاً مباشراً للصف من الـ widget بسهولة (إلا عبر البحث)،
+        # سنبحث عن الصف الذي يحتوي على الـ widget الذي تم النقر عليه
+        clicked_widget = event.widget
+        target_row = None
+        for row in self.rows:
+            if clicked_widget in row:
+                target_row = row
+                break
+        
+        if target_row:
+            self.selected_row_widgets = target_row
+            for w in target_row:
+                w.config(bg='#D5F5E3') # لون التحديد (أخضر فاتح)
 
     def on_item_select(self, event, row_idx):
         """عند اختيار صنف، قم بتحديث السعر تلقائياً"""
@@ -1486,37 +1566,33 @@ class CurrentAccountPage:
             for row_entries in self.rows:
                 trans_id = getattr(row_entries[0], 'trans_id', None)
                 
-                # قراءة القيم
-                note = row_entries[0].get().strip()
-                equipment = row_entries[1].get().strip()
-                day = row_entries[2].get().strip()
-                date = row_entries[3].get().strip()
-                item = row_entries[4].get().strip()
-                
-                price_str = row_entries[5].get()
-                weight_str = row_entries[6].get()
-                count_str = row_entries[7].get()
+                # Columns: 0:Equipment, 1:Date, 2:Item, 3:Price, 4:Weight, 5:Count, 6:Status, 7:Amount
+                equipment = row_entries[0].get().strip()
+                date = row_entries[1].get().strip()
+                item = row_entries[2].get().strip()
+                price_str = row_entries[3].get()
+                weight_str = row_entries[4].get()
+                count_str = row_entries[5].get()
+                status = row_entries[6].get().strip()
+                amount_str = row_entries[7].get().strip()
                 
                 price = float(price_str or 0)
                 weight = float(weight_str or 0)
                 count = float(count_str or 0)
+                amount = float(amount_str or 0)
                 
-                status = row_entries[8].get().strip()
+                # Missing: note, day. We'll use empty strings or defaults.
+                note = ""
+                day = "" 
                 
-                # --- المنطق الذكي: حساب المبلغ تلقائياً ---
-                # إذا كان هناك سعر و (وزن أو عدد)، نحسب المبلغ
-                current_amount_str = row_entries[9].get().strip()
-                amount = float(current_amount_str or 0)
-                
-                if status != "مدفوع": # للبضاعة فقط
+                # Recalculate amount if needed (smart logic)
+                if status != "مدفوع" and status != "سماح":
                     if price > 0 and (weight > 0 or count > 0):
-                        calc_amount = price * (weight if weight > 0 else count)
-                        amount = calc_amount
-                        # تحديث الخانة في الجدول للمستخدم
-                        row_entries[9].delete(0, tk.END)
-                        row_entries[9].insert(0, str(amount))
+                         amount = price * (weight if weight > 0 else count)
+                         row_entries[7].delete(0, tk.END)
+                         row_entries[7].insert(0, str(amount))
                 
-                is_empty = not (note or equipment or day or date or item or price or weight or count or status or amount)
+                is_empty = not (equipment or date or item or price or weight or count or status or amount)
                 
                 if trans_id:
                     if is_empty:
@@ -1524,20 +1600,169 @@ class CurrentAccountPage:
                     else:
                         self.db.update_seller_transaction(trans_id, amount, status, count, weight, price, item, date, day, equipment, note)
                 elif not is_empty:
-                    self.db.add_seller_transaction(self.seller_id, amount, status, count, weight, price, item, date, day, equipment, note)
+                     # Add new transaction
+                     self.db.add_seller_transaction(self.seller_id, amount, status, count, weight, price, item, date, day, equipment, note)
             
             # 2. تحديث الرصيد النهائي للبائع في الجدول الرئيسي
             final_remaining = self.calculate_totals() # يعيد حساب المتبقي النهائي
             
             # تحديث sellers_accounts
-            # نحتاج دالة في قاعدة البيانات لتحديث الرصيد فقط
-            # للتبسيط سنستخدم update_seller_account مع الحفاظ على total_credit القديم
             total_credit = self.account_data[3] if self.account_data else 0.0
             self.db.update_seller_account(self.seller_id, self.seller_name, final_remaining, total_credit)
             
             messagebox.showinfo("نجاح", "تم حفظ الفاتورة وتحديث رصيد البائع")
-            # self.window.destroy() # اختياري: هل نغلق النافذة أم نبقيها؟ سنبقيها للتعديل
             
         except Exception as e:
             messagebox.showerror("خطأ", f"حدث خطأ أثناء الحفظ: {e}")
+
+
+class MealsManagerWindow:
+    def __init__(self, parent, db, colors):
+        self.window = tk.Toplevel(parent)
+        self.window.title("إدارة الوجبات والأصناف")
+        self.window.geometry("700x550")
+        self.colors = colors
+        self.db = db
+        
+        bg_color = self.colors.get('window_bg', '#FFB347')
+        self.window.configure(bg=bg_color)
+        
+        # Center
+        self.window.update_idletasks()
+        x = (self.window.winfo_screenwidth() // 2) - 350
+        y = (self.window.winfo_screenheight() // 2) - 275
+        self.window.geometry(f"700x550+{x}+{y}")
+
+        # Title
+        tk.Label(self.window, text="قائمة الوجبات والأصناف", font=('Playpen Sans Arabic', 18, 'bold'), 
+                 bg=self.colors.get('header_bg', '#6C3483'), fg='white').pack(fill=tk.X, pady=(0, 10))
+
+        # Content Frame
+        content_frame = tk.Frame(self.window, bg=bg_color)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        # List (Treeview)
+        columns = ('id', 'name', 'price', 'weight')
+        self.tree = ttk.Treeview(content_frame, columns=columns, show='headings', height=12)
+        self.tree.heading('id', text='ID')
+        self.tree.heading('name', text='اسم الصنف')
+        self.tree.heading('price', text='السعر')
+        self.tree.heading('weight', text='وزن العدة')
+        
+        self.tree.column('id', width=50, anchor='center')
+        self.tree.column('name', width=250, anchor='center')
+        self.tree.column('price', width=100, anchor='center')
+        self.tree.column('weight', width=100, anchor='center')
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(content_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.bind('<<TreeviewSelect>>', self.on_select)
+
+        # Form Frame
+        form_frame = tk.Frame(self.window, bg=bg_color)
+        form_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Grid layout for form
+        tk.Label(form_frame, text="اسم الصنف:", font=('Arial', 12, 'bold'), bg=bg_color).grid(row=0, column=5, padx=5, pady=5)
+        self.entry_name = tk.Entry(form_frame, font=('Arial', 12), justify='right', width=20)
+        self.entry_name.grid(row=0, column=4, padx=5, pady=5)
+        
+        tk.Label(form_frame, text="السعر:", font=('Arial', 12, 'bold'), bg=bg_color).grid(row=0, column=3, padx=5, pady=5)
+        self.entry_price = tk.Entry(form_frame, font=('Arial', 12), justify='center', width=10)
+        self.entry_price.grid(row=0, column=2, padx=5, pady=5)
+        
+        tk.Label(form_frame, text="وزن العدة:", font=('Arial', 12, 'bold'), bg=bg_color).grid(row=0, column=1, padx=5, pady=5)
+        self.entry_weight = tk.Entry(form_frame, font=('Arial', 12), justify='center', width=10)
+        self.entry_weight.grid(row=0, column=0, padx=5, pady=5)
+
+        # Buttons
+        btn_frame = tk.Frame(self.window, bg=bg_color)
+        btn_frame.pack(pady=15)
+        
+        btn_style = {'font': ('Arial', 12, 'bold'), 'width': 12, 'cursor': 'hand2'}
+        
+        tk.Button(btn_frame, text="إضافة جديد", command=self.add_meal, bg='#27AE60', fg='white', **btn_style).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="حفظ التعديل", command=self.update_meal, bg='#2980B9', fg='white', **btn_style).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="حذف", command=self.delete_meal, bg='#C0392B', fg='white', **btn_style).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="تنظيف", command=self.clear_form, bg='#7F8C8D', fg='white', **btn_style).pack(side=tk.LEFT, padx=5)
+
+        self.load_meals()
+
+    def load_meals(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        meals = self.db.get_all_meals()
+        for meal in meals:
+            # meal: id, name, price, equip_weight
+            self.tree.insert('', tk.END, values=meal)
+
+    def on_select(self, event):
+        selected = self.tree.selection()
+        if selected:
+            values = self.tree.item(selected[0], 'values')
+            self.entry_name.delete(0, tk.END)
+            self.entry_name.insert(0, values[1])
+            self.entry_price.delete(0, tk.END)
+            self.entry_price.insert(0, values[2])
+            self.entry_weight.delete(0, tk.END)
+            self.entry_weight.insert(0, values[3])
+            self.selected_id = values[0]
+        else:
+            self.selected_id = None
+
+    def add_meal(self):
+        name = self.entry_name.get().strip()
+        price = self.entry_price.get().strip()
+        weight = self.entry_weight.get().strip() or "0"
+        
+        if name and price:
+            try:
+                if self.db.add_meal(name, float(price), float(weight)):
+                    messagebox.showinfo("نجاح", "تم إضافة الصنف")
+                    self.load_meals()
+                    self.clear_form()
+                else:
+                    messagebox.showerror("خطأ", "هذا الصنف موجود بالفعل")
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال أرقام صحيحة")
+        else:
+            messagebox.showwarning("تنبيه", "الرجاء إدخال الاسم والسعر")
+
+    def update_meal(self):
+        if hasattr(self, 'selected_id') and self.selected_id:
+            name = self.entry_name.get().strip()
+            price = self.entry_price.get().strip()
+            weight = self.entry_weight.get().strip() or "0"
+            
+            if name and price:
+                try:
+                    self.db.update_meal(self.selected_id, name, float(price), float(weight))
+                    messagebox.showinfo("نجاح", "تم تعديل الصنف")
+                    self.load_meals()
+                    self.clear_form()
+                except ValueError:
+                    messagebox.showerror("خطأ", "الرجاء إدخال أرقام صحيحة")
+        else:
+            messagebox.showwarning("تنبيه", "اختر صنفاً للتعديل")
+
+    def delete_meal(self):
+        if hasattr(self, 'selected_id') and self.selected_id:
+            if messagebox.askyesno("تأكيد", "هل أنت متأكد من حذف هذا الصنف؟"):
+                self.db.delete_meal(self.selected_id)
+                self.load_meals()
+                self.clear_form()
+        else:
+            messagebox.showwarning("تنبيه", "اختر صنفاً للحذف")
+
+    def clear_form(self):
+        self.entry_name.delete(0, tk.END)
+        self.entry_price.delete(0, tk.END)
+        self.entry_weight.delete(0, tk.END)
+        self.selected_id = None
+        if self.tree.selection():
+            self.tree.selection_remove(self.tree.selection())
 

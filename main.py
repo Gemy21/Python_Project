@@ -518,11 +518,11 @@ class StartMenu:
         entry_name.focus()
 
     def open_new_entry(self):
-        """فتح نافذة إضافة بائع جديد"""
+        """فتح نافذة إضافة جديد (بائع أو عميل)"""
         # إنشاء نافذة فرعية
         new_window = tk.Toplevel(self.root)
-        new_window.title("إضافة بائع جديد")
-        new_window.geometry("600x250") # مستطيل عريض
+        new_window.title("إضافة جديد")
+        new_window.geometry("600x350") # زيادة الارتفاع
         new_window.configure(bg=self.colors['pink'])
         
         # توسيط النافذة
@@ -536,44 +536,86 @@ class StartMenu:
         # العنوان
         lbl_title = tk.Label(
             new_window,
-            text="إضافة بائع جديد",
+            text="إضافة حساب جديد",
             font=('Playpen Sans Arabic', 16, 'bold'),
             bg=self.colors['pink'],
             fg=self.colors['red']
         )
         lbl_title.pack(pady=15)
         
+        # نوع الحساب (Radio Buttons)
+        type_frame = tk.Frame(new_window, bg=self.colors['pink'])
+        type_frame.pack(pady=5)
+        
+        type_var = tk.StringVar(value="seller")
+        
+        rb_style = {
+            'font': ('Playpen Sans Arabic', 12, 'bold'),
+            'bg': self.colors['pink'],
+            'activebackground': self.colors['pink'],
+            'cursor': 'hand2'
+        }
+        
+        tk.Radiobutton(type_frame, text="بائع", variable=type_var, value="seller", **rb_style).pack(side=tk.RIGHT, padx=20)
+        tk.Radiobutton(type_frame, text="عميل", variable=type_var, value="client", **rb_style).pack(side=tk.RIGHT, padx=20)
+        
         # إطار للحقول
         fields_frame = tk.Frame(new_window, bg=self.colors['pink'])
         fields_frame.pack(pady=10)
         
-        # اسم البائع (وسط)
-        tk.Label(fields_frame, text="اسم البائع:", font=('Arial', 12, 'bold'), bg=self.colors['pink']).grid(row=0, column=1, padx=5, sticky='e')
+        # الاسم (وسط)
+        tk.Label(fields_frame, text="الاسم:", font=('Arial', 12, 'bold'), bg=self.colors['pink']).grid(row=0, column=1, padx=5, sticky='e')
         entry_name = tk.Entry(fields_frame, font=('Arial', 14), justify='center', width=25)
         entry_name.grid(row=0, column=0, padx=10, pady=5)
         entry_name.focus()
         
         # دالة الحفظ
-        def save_seller():
+        def save_entry():
             name = entry_name.get().strip()
+            entry_type = type_var.get()
             phone = ""
             
             if not name:
-                messagebox.showwarning("تنبيه", "الرجاء إدخال اسم البائع", parent=new_window)
+                messagebox.showwarning("تنبيه", "الرجاء إدخال الاسم", parent=new_window)
                 return
             
             try:
                 from database import Database
                 db = Database()
-                # إضافة البائع مع قيم صفرية للمتبقي والسماح ورقم الهاتف
-                db.add_seller_account(name, 0.0, 0.0, phone)
                 
-                # رسالة نجاح صغيرة أو إغلاق مباشر
-                messagebox.showinfo("نجاح", f"تم إضافة البائع {name} بنجاح", parent=new_window)
+                # التحقق من وجود الاسم في البائعين
+                existing_seller = db.get_seller_by_name(name)
+                # التحقق من وجود الاسم في العملاء
+                existing_client = db.get_client_by_name(name)
+                
+                if existing_seller:
+                    messagebox.showerror("خطأ", f"الاسم '{name}' موجود بالفعل كبائع!", parent=new_window)
+                    return
+                
+                if existing_client:
+                    messagebox.showerror("خطأ", f"الاسم '{name}' موجود بالفعل كعميل!", parent=new_window)
+                    return
+                
+                # الحفظ بناءً على النوع
+                if entry_type == "seller":
+                    db.add_seller_account(name, 0.0, 0.0, phone)
+                    msg_type = "بائع"
+                else:
+                    # إضافة عميل
+                    if db.add_client_account(name, phone):
+                        msg_type = "عميل"
+                    else:
+                        # هذا الاحتياط في حال فشل add_client_account لسبب آخر (مثل القيد UNIQUE)
+                        messagebox.showerror("خطأ", "حدث خطأ أثناء إضافة العميل (قد يكون موجوداً)", parent=new_window)
+                        return
+
+                # رسالة نجاح
+                messagebox.showinfo("نجاح", f"تم إضافة ال{msg_type} {name} بنجاح", parent=new_window)
                 new_window.destroy()
                 
             except Exception as e:
                 messagebox.showerror("خطأ", f"حدث خطأ أثناء الحفظ: {e}", parent=new_window)
+
         # زر الحفظ
         save_btn_style = {
             'font': ('Playpen Sans Arabic', 14, 'bold'),
@@ -587,8 +629,8 @@ class StartMenu:
             'activeforeground': 'white'
         }
         
-        tk.Button(new_window, text="حفظ البيانات", command=save_seller, **save_btn_style).pack(pady=20)
-        new_window.bind('<Return>', lambda e: save_seller())
+        tk.Button(new_window, text="حفظ البيانات", command=save_entry, **save_btn_style).pack(pady=20)
+        new_window.bind('<Return>', lambda e: save_entry())
 
     def open_add_collection(self):
         """إضافة تحصيل جديد (دفعة نقدية لبائع)"""
@@ -766,6 +808,11 @@ class StartMenu:
         
         tk.Button(exp_window, text="حفظ المصروف", command=save_expense, **btn_style).pack(pady=20)
         exp_window.bind('<Return>', lambda e: save_expense())
+
+    def open_reports(self):
+        """فتح صفحة التقارير اليومية والشهرية"""
+        from reports_page import DailyReportsPage
+        DailyReportsPage(self.root)
 
     def open_data_sync(self):
         """فتح نافذة مزامنة البيانات"""

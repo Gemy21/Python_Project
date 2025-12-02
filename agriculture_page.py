@@ -78,10 +78,15 @@ class AgricultureTransferPage:
         
         tk.Label(shipment_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
         
-        shipment_entry = make_entry(shipment_frame, self.shipment_var, width=25)
-        shipment_entry.pack(side=tk.RIGHT, padx=5)
+        # Get existing clients for dropdown
+        clients = self.db.get_all_clients_accounts()
+        client_names = [c[1] for c in clients]
         
-        tk.Label(shipment_frame, text="اسم النقلة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+        client_combo = ttk.Combobox(shipment_frame, textvariable=self.shipment_var, values=client_names, 
+                                    font=self.fonts['entry'], width=23, justify='center')
+        client_combo.pack(side=tk.RIGHT, padx=5)
+        
+        tk.Label(shipment_frame, text="اسم العميل:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
         
         item_frame = tk.Frame(controls, bg=self.colors['header_bg'])
         item_frame.pack(side=tk.RIGHT, padx=20)
@@ -152,7 +157,7 @@ class AgricultureTransferPage:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        headers = ['اسم البائع', 'اسم النقلة', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد']
+        headers = ['اسم البائع', 'اسم العميل', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد']
         
         for i, text in enumerate(headers):
             lbl = tk.Label(self.scrollable_frame, text=text, font=('Playpen Sans Arabic', 16, 'bold'),
@@ -179,37 +184,33 @@ class AgricultureTransferPage:
         saved_data = self.db.get_agriculture_transfers()
         saved_data.reverse()
         
+        # Get filter values
+        filter_client = self.shipment_var.get().strip()
+        filter_item = self.item_var.get().strip()
+        
+        # Filter data based on client name and item name
+        filtered_data = []
+        for data_row in saved_data:
+            # data_row: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type
+            client_name = data_row[1]  # shipment_name is now client_name
+            item_name = data_row[3]
+            
+            # Apply filters
+            match = True
+            if filter_client and filter_client.lower() not in client_name.lower():
+                match = False
+            if filter_item and filter_item.lower() not in item_name.lower():
+                match = False
+            
+            if match:
+                filtered_data.append(data_row)
+        
         entry_style = {'font': ('Playpen Sans Arabic', 14), 'relief': tk.SUNKEN, 'bd': 1, 'justify': 'center'}
         
         row_num = 1
         
-        row_widgets = []
-        for col_idx in range(6):
-            e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
-            
-            if col_idx == 1:
-                shipment_val = self.shipment_var.get()
-                if shipment_val:
-                    e.insert(0, shipment_val)
-                    e.config(state='readonly')
-            elif col_idx == 2:
-                item_val = self.item_var.get()
-                if item_val:
-                    e.insert(0, item_val)
-                    e.config(state='readonly')
-            elif col_idx == 3:
-                price_val = self.price_var.get()
-                if price_val:
-                    e.insert(0, price_val)
-                    e.config(state='readonly')
-            
-            e.grid(row=row_num, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
-            row_widgets.append(e)
-            
-        self.table_rows.append(row_widgets)
-        row_num += 1
-        
-        for data_row in saved_data:
+        # Display filtered data
+        for data_row in filtered_data:
             row_widgets = []
             vals = [data_row[2], data_row[1], data_row[3], data_row[4], data_row[5], data_row[6]]
             
@@ -223,30 +224,48 @@ class AgricultureTransferPage:
             self.table_rows.append(row_widgets)
             row_num += 1
             
+        # Add empty editable rows for new entries
         total_target_rows = 20
         current_rows = len(self.table_rows)
         for i in range(total_target_rows - current_rows):
             row_widgets = []
             for col_idx in range(6):
                 e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
-                e.config(state='readonly')
+                
+                # Pre-fill client name and item/price if selected
+                if col_idx == 1:
+                    shipment_val = self.shipment_var.get()
+                    if shipment_val:
+                        e.insert(0, shipment_val)
+                elif col_idx == 2:
+                    item_val = self.item_var.get()
+                    if item_val:
+                        e.insert(0, item_val)
+                elif col_idx == 3:
+                    price_val = self.price_var.get()
+                    if price_val:
+                        e.insert(0, price_val)
+                
                 e.grid(row=row_num, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
                 row_widgets.append(e)
+            
+            self.table_rows.append(row_widgets)
             row_num += 1
 
     def save_transfer(self):
-        shipment_name = self.shipment_var.get().strip()
+        client_name = self.shipment_var.get().strip()
         item_name_input = self.item_var.get().strip()
         unit_price_str = self.price_var.get().strip()
         
-        if not shipment_name:
-            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم النقلة")
+        if not client_name:
+            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم العميل")
             return
             
         if not item_name_input:
             messagebox.showwarning("تنبيه", "الرجاء إدخال الصنف")
             return
         
+        # Resolve Item Name
         meals = self.db.get_all_meals()
         final_item_name = item_name_input
         item_exists = False
@@ -257,6 +276,7 @@ class AgricultureTransferPage:
                 item_exists = True
                 break
         
+        # Add item if new
         if not item_exists:
             try:
                 price_val = float(unit_price_str) if unit_price_str else 0.0
@@ -271,19 +291,24 @@ class AgricultureTransferPage:
             messagebox.showerror("خطأ", "سعر الوحدة غير صحيح")
             return
         
-        if len(self.table_rows) > 0:
-            first_row = self.table_rows[0]
-            name_input = first_row[0].get().strip()
-            weight_str = first_row[4].get().strip()
-            count_str = first_row[5].get().strip()
+        # Process Rows
+        rows_processed = 0
+        
+        for row in self.table_rows:
+            seller_name_input = row[0].get().strip()
+            weight_str = row[4].get().strip()
+            count_str = row[5].get().strip()
             
-            if not name_input:
-                messagebox.showwarning("تنبيه", "الرجاء إدخال الاسم في الصف الأول")
-                return
-            
+            # Skip empty rows or rows without seller name
+            if not seller_name_input:
+                continue
+                
             try:
                 weight = float(weight_str) if weight_str else 0.0
                 count = float(count_str) if count_str else 0.0
+                
+                if weight == 0 and count == 0:
+                    continue
                 
                 amount = 0.0
                 if weight > 0:
@@ -291,57 +316,41 @@ class AgricultureTransferPage:
                 elif count > 0:
                     amount = count * unit_price
                 
-                # Check if name exists in Sellers
-                seller_data = self.db.get_seller_by_name(name_input)
+                # 1. Client Action (Credit - He brought goods)
+                # We use negative amount to indicate credit (Company owes Client)
+                self.db.add_client_debt(client_name, -amount)
                 
-                # Check if name exists in Clients
-                clients = self.db.get_all_clients_accounts()
-                client_exists = any(c[1] == name_input for c in clients)
+                # Record 'in' transfer for Client
+                self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, unit_price, weight, count, "", "in")
                 
-                if seller_data:
-                    # It's a Seller
-                    self.db.add_agriculture_transfer(shipment_name, name_input, final_item_name, unit_price, weight, count, "", "out")
-                    
-                    seller_id = seller_data[0]
-                    note = f"ترحيل زراعة - {shipment_name}"
-                    today_date = datetime.now().strftime("%Y-%m-%d")
-                    
-                    self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
-                                                   final_item_name, today_date, "", "", note)
-                    
-                    messagebox.showinfo("نجاح", f"تم ترحيل النقلة لحساب البائع {name_input}")
-                    
-                elif client_exists:
-                    # It's a Client
-                    self.db.add_agriculture_transfer(name_input, shipment_name, final_item_name, unit_price, weight, count, "", "in")
-                    
-                    # Add debt to client
-                    self.db.add_client_debt(name_input, amount)
-                    
-                    messagebox.showinfo("نجاح", f"تم ترحيل النقلة لحساب العميل {name_input}")
-                    
-                else:
-                    # Treat as new Seller
-                    self.db.add_seller_account(name_input, 0, 0)
-                    seller_data = self.db.get_seller_by_name(name_input)
-                    seller_id = seller_data[0]
-                    
-                    self.db.add_agriculture_transfer(shipment_name, name_input, final_item_name, unit_price, weight, count, "", "out")
-                    
-                    note = f"ترحيل زراعة - {shipment_name}"
-                    today_date = datetime.now().strftime("%Y-%m-%d")
-                    
-                    self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
-                                                   final_item_name, today_date, "", "", note)
-                                                   
-                    messagebox.showinfo("نجاح", f"تم إضافة بائع جديد وترحيل النقلة لحساب {name_input}")
+                # 2. Seller Action (Debit - He took goods)
+                # Check/Create Seller
+                seller_data = self.db.get_seller_by_name(seller_name_input)
+                if not seller_data:
+                    self.db.add_seller_account(seller_name_input, 0, 0)
+                    seller_data = self.db.get_seller_by_name(seller_name_input)
                 
-                self.item_var.set("")
-                self.price_var.set("")
+                seller_id = seller_data[0]
                 
-                self.load_data()
+                # Record 'out' transfer for Seller
+                self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, unit_price, weight, count, "", "out")
+                
+                # Add Transaction to Seller Account
+                note = f"نقلة من العميل {client_name}"
+                today_date = datetime.now().strftime("%Y-%m-%d")
+                
+                self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
+                                               final_item_name, today_date, "", "", note)
+                
+                rows_processed += 1
                 
             except ValueError:
-                messagebox.showerror("خطأ", "الرجاء إدخال قيم رقمية صحيحة")
+                continue
+
+        if rows_processed > 0:
+            messagebox.showinfo("نجاح", f"تم ترحيل {rows_processed} عملية بنجاح")
+            self.item_var.set("")
+            self.price_var.set("")
+            self.load_data()
         else:
-            messagebox.showwarning("تنبيه", "لا يوجد صف للإدخال")
+            messagebox.showwarning("تنبيه", "لم يتم إدخال بيانات صحيحة في الجدول")

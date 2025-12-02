@@ -246,6 +246,19 @@ class Database:
             )
         ''')
 
+        # جدول التقارير اليومية
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_date DATE NOT NULL UNIQUE,
+                total_collection REAL DEFAULT 0,
+                remaining_profit REAL DEFAULT 0,
+                total_expenses REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         conn.commit()
         conn.close()
         print("تم تهيئة قاعدة البيانات بنجاح")
@@ -442,6 +455,24 @@ class Database:
         conn.close()
         return result
 
+    def get_client_by_name(self, name):
+        """البحث عن عميل بالاسم"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # Ensure table exists just in case
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clients_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL UNIQUE,
+                balance REAL DEFAULT 0,
+                phone TEXT
+            )
+        ''')
+        cursor.execute('SELECT id, client_name, balance, phone FROM clients_accounts WHERE client_name = ?', (name,))
+        result = cursor.fetchone()
+        conn.close()
+        return result
+
     
     def add_seller_account(self, seller_name, remaining_amount, total_credit, phone=""):
         """إضافة حساب بائع جديد"""
@@ -521,6 +552,32 @@ class Database:
         cursor.execute('DELETE FROM seller_transactions WHERE id = ?', (trans_id,))
         conn.commit()
         conn.close()
+
+    def get_last_payment_date(self, seller_id):
+        """جلب تاريخ آخر عملية دفع لبائع"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT date FROM seller_transactions 
+            WHERE seller_id = ? AND status = 'مدفوع' 
+            ORDER BY date DESC LIMIT 1
+        ''', (seller_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+
+    def get_last_transaction_date(self, seller_id):
+        """جلب تاريخ آخر معاملة لبائع (أي نوع)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT date FROM seller_transactions 
+            WHERE seller_id = ? 
+            ORDER BY date DESC LIMIT 1
+        ''', (seller_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
 
     # --- طرق التعامل مع الوجبات / الأصناف ---
 
@@ -709,3 +766,97 @@ class Database:
         result = cursor.fetchone()
         conn.close()
         return result
+
+    # --- طرق التعامل مع التقارير اليومية ---
+
+    def save_daily_report(self, report_date, total_collection, remaining_profit, total_expenses):
+        """حفظ أو تحديث تقرير يومي"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # التحقق من وجود تقرير لنفس اليوم
+        cursor.execute('SELECT id FROM daily_reports WHERE report_date = ?', (report_date,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            # تحديث التقرير الموجود
+            cursor.execute('''
+                UPDATE daily_reports 
+                SET total_collection=?, remaining_profit=?, total_expenses=?, updated_at=CURRENT_TIMESTAMP
+                WHERE report_date=?
+            ''', (total_collection, remaining_profit, total_expenses, report_date))
+        else:
+            # إضافة تقرير جديد
+            cursor.execute('''
+                INSERT INTO daily_reports (report_date, total_collection, remaining_profit, total_expenses)
+                VALUES (?, ?, ?, ?)
+            ''', (report_date, total_collection, remaining_profit, total_expenses))
+        
+        conn.commit()
+        conn.close()
+
+    def get_daily_report(self, report_date):
+        """جلب تقرير يوم محدد"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT report_date, total_collection, remaining_profit, total_expenses 
+            FROM daily_reports 
+            WHERE report_date = ?
+        ''', (report_date,))
+        result = cursor.fetchone()
+        conn.close()
+        return result
+
+    def get_monthly_reports(self, year, month):
+        """جلب تقارير شهر محدد"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # تنسيق التاريخ للبحث (YYYY-MM-%)
+        date_pattern = f"{year}-{month:02d}-%"
+        
+        cursor.execute('''
+            SELECT report_date, total_collection, remaining_profit, total_expenses 
+            FROM daily_reports 
+            WHERE report_date LIKE ?
+            ORDER BY report_date
+        ''', (date_pattern,))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def calculate_daily_totals(self, target_date):
+        """حساب المجاميع اليومية من المعاملات"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # حساب إجمالي التحصيل (المدفوع من البائعين)
+        cursor.execute('''
+            SELECT SUM(amount) FROM seller_transactions 
+            WHERE status = 'مدفوع' AND date = ?
+        ''', (target_date,))
+        total_collection = cursor.fetchone()[0] or 0.0
+        
+        # حساب باقي ربح اليوم (المتبقي من البضاعة)
+        cursor.execute('''
+            SELECT SUM(amount) FROM seller_transactions 
+            WHERE status = 'متبقي' AND date = ?
+        ''', (target_date,))
+        remaining_profit = cursor.fetchone()[0] or 0.0
+        
+        # حساب إجمالي المصاريف
+        cursor.execute('''
+            SELECT SUM(amount) FROM expenses 
+            WHERE expense_date = ?
+        ''', (target_date,))
+        total_expenses = cursor.fetchone()[0] or 0.0
+        
+        conn.close()
+        
+        return {
+            'total_collection': total_collection,
+            'remaining_profit': remaining_profit,
+            'total_expenses': total_expenses
+        }
+

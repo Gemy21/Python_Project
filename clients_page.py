@@ -171,7 +171,7 @@ class ClientsPage:
             
         # Buttons
         # Right side
-        create_btn("فواتير العملاء الجاهزة", self.open_ready_invoices, self.colors['button_bg']).pack(side=tk.RIGHT, padx=5)
+        # Removed "فواتير العملاء الجاهزة" button as requested
         
         # Left side
         create_btn("حسابات العملاء", self.open_client_accounts, '#E74C3C').pack(side=tk.LEFT, padx=5)
@@ -448,12 +448,257 @@ class ClientsPage:
                     load_clients()
             else:
                 messagebox.showwarning("تنبيه", "الرجاء اختيار عميل للحذف")
+        
+        def open_client_transfers():
+            """فتح صفحة نقلات العميل المحدد"""
+            selected = tree.selection()
+            if not selected:
+                messagebox.showwarning("تنبيه", "الرجاء اختيار عميل أولاً")
+                return
+            
+            # Get selected client name
+            client_name = tree.item(selected[0])['values'][0]
+            
+            # Open client transfers page
+            self.open_client_transfers_page(client_name)
 
         # Buttons Frame
         btn_frame = tk.Frame(window, bg=self.colors['bg'])
         btn_frame.pack(pady=10)
         
+        tk.Button(btn_frame, text="حساب العميل", command=open_client_transfers, font=self.fonts['button'], bg='#3498DB', fg='white', width=15).pack(side=tk.TOP, pady=5)
         tk.Button(btn_frame, text="إضافة عميل", command=add_client, font=self.fonts['button'], bg='#27AE60', fg='white', width=15).pack(side=tk.RIGHT, padx=10)
         tk.Button(btn_frame, text="حذف عميل", command=delete_client, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.LEFT, padx=10)
         
         load_clients()
+    
+    def open_client_transfers_page(self, client_name):
+        """صفحة عرض نقلات العميل مع إمكانية إنشاء فاتورة"""
+        transfers_window = tk.Toplevel(self.window)
+        transfers_window.title(f"نقلات العميل: {client_name}")
+        transfers_window.geometry("1200x700")
+        transfers_window.configure(bg=self.colors['bg'])
+        
+        # Title
+        title_frame = tk.Frame(transfers_window, bg=self.colors['header_bg'], height=60)
+        title_frame.pack(fill=tk.X)
+        title_frame.pack_propagate(False)
+        tk.Label(title_frame, text=f"نقلات العميل: {client_name}", font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(pady=15)
+        
+        # Table Frame
+        table_frame = tk.Frame(transfers_window, bg=self.colors['bg'])
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Canvas for scrolling
+        canvas = tk.Canvas(table_frame, bg=self.colors['bg'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=canvas.yview)
+        
+        scrollable_frame = tk.Frame(canvas, bg=self.colors['bg'])
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas_frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.bind('<Configure>', lambda e: canvas.itemconfig(canvas_frame_id, width=e.width))
+        
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Headers
+        headers = ['البائع', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد', 'العدة', 'الإجمالي']
+        header_colors = ['#F5CBA7', '#F9E79F', '#F5B7B1', '#AED6F1', '#A9DFBF', '#D7BDE2', '#E5E7E9']
+        
+        for i, text in enumerate(headers):
+            lbl = tk.Label(
+                scrollable_frame, 
+                text=text, 
+                font=('Playpen Sans Arabic', 16, 'bold'),
+                bg=header_colors[i],
+                relief=tk.RAISED,
+                bd=2,
+                height=2
+            )
+            lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
+            scrollable_frame.grid_columnconfigure(i, weight=1)
+        
+        # Get client transfers
+        all_transfers = self.db.get_agriculture_transfers()
+        client_transfers = [t for t in all_transfers if t[1] == client_name and t[8] == 'in']
+        
+        # Store selected transfer
+        selected_transfer = {'id': None, 'widgets': []}
+        
+        def on_transfer_click(transfer_id, row_widgets):
+            """تحديد النقلة عند النقر عليها"""
+            # Reset previous selection
+            for widget in selected_transfer['widgets']:
+                col_idx = widget.grid_info()['column']
+                widget.config(bg=header_colors[col_idx])
+            
+            # Highlight selected row
+            selected_transfer['id'] = transfer_id
+            selected_transfer['widgets'] = row_widgets
+            for widget in row_widgets:
+                widget.config(bg='#D5F5E3')
+        
+        # Create rows
+        entry_style = {'font': ('Playpen Sans Arabic', 14), 'relief': tk.SUNKEN, 'bd': 1, 'justify': 'center'}
+        
+        for idx, transfer in enumerate(client_transfers):
+            # transfer: id, shipment, seller, item, price, weight, count, equipment, type
+            price = transfer[4] or 0
+            weight = transfer[5] or 0
+            count = transfer[6] or 0
+            equipment = transfer[7] or ""
+            
+            # Calculate total
+            total = 0
+            if weight > 0:
+                total = weight * price
+            elif count > 0:
+                total = count * price
+            
+            vals = [
+                transfer[2],  # Seller
+                transfer[3],  # Item
+                f"{price:.2f}",
+                f"{weight:.2f}",
+                f"{count:.0f}",
+                equipment,
+                f"{total:.2f}"
+            ]
+            
+            row_widgets = []
+            for col_idx, val in enumerate(vals):
+                e = tk.Entry(scrollable_frame, **entry_style, bg=header_colors[col_idx])
+                e.insert(0, str(val))
+                e.config(state='readonly')
+                e.grid(row=idx+1, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
+                
+                transfer_id = transfer[0]
+                e.bind('<Button-1>', lambda event, tid=transfer_id, rw=None: on_transfer_click(tid, rw if rw else event.widget.master.grid_slaves(row=event.widget.grid_info()['row'])))
+                
+                row_widgets.append(e)
+        
+        # Bottom buttons
+        btn_frame = tk.Frame(transfers_window, bg=self.colors['bg'], pady=10)
+        btn_frame.pack(fill=tk.X)
+        
+        def create_invoice_from_transfer():
+            """إنشاء فاتورة من النقلة المحددة مع إدخال الخصومات"""
+            if not selected_transfer['id']:
+                messagebox.showwarning("تنبيه", "الرجاء تحديد نقلة أولاً")
+                return
+            
+            # Get transfer data
+            transfer_data = None
+            for t in client_transfers:
+                if t[0] == selected_transfer['id']:
+                    transfer_data = t
+                    break
+            
+            if not transfer_data:
+                messagebox.showerror("خطأ", "لم يتم العثور على النقلة")
+                return
+            
+            # Open Dialog to enter deductions
+            dialog = tk.Toplevel(transfers_window)
+            dialog.title("بيانات الفاتورة")
+            dialog.geometry("500x450")
+            dialog.configure(bg=self.colors['bg'])
+            
+            # Center
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - 250
+            y = (dialog.winfo_screenheight() // 2) - 225
+            dialog.geometry(f"500x450+{x}+{y}")
+            
+            tk.Label(dialog, text="إدخال بيانات الفاتورة", font=('Playpen Sans Arabic', 16, 'bold'), bg=self.colors['bg']).pack(pady=15)
+            
+            form_frame = tk.Frame(dialog, bg=self.colors['bg'])
+            form_frame.pack(pady=10, padx=20, fill=tk.X)
+            
+            entries = {}
+            
+            def create_row(label_text, key, default="0", is_percent=False):
+                row = tk.Frame(form_frame, bg=self.colors['bg'])
+                row.pack(fill=tk.X, pady=5)
+                
+                tk.Label(row, text=label_text, font=('Arial', 12, 'bold'), bg=self.colors['bg'], width=15, anchor='e').pack(side=tk.RIGHT)
+                
+                if is_percent:
+                    # Frame for entry and % sign
+                    p_frame = tk.Frame(row, bg=self.colors['bg'])
+                    p_frame.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+                    
+                    tk.Label(p_frame, text="%", font=('Arial', 12, 'bold'), bg=self.colors['bg']).pack(side=tk.LEFT, padx=5)
+                    entry = tk.Entry(p_frame, font=('Arial', 12), justify='center')
+                    entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
+                else:
+                    entry = tk.Entry(row, font=('Arial', 12), justify='center')
+                    entry.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+                
+                entry.insert(0, default)
+                entries[key] = entry
+            
+            create_row("نولون", "nolon")
+            create_row("العمولة", "commission", "10", is_percent=True)
+            create_row("مشال", "mashal")
+            create_row("إيجار عدة", "rent")
+            create_row("نقدية", "cash")
+            
+            def confirm():
+                # Collect data
+                deductions = {}
+                try:
+                    deductions['nolon'] = entries['nolon'].get().strip() or "0"
+                    
+                    comm_val = entries['commission'].get().strip() or "0"
+                    # Add % if not present, since user sees the % label
+                    if '%' not in comm_val:
+                        deductions['commission'] = comm_val + "%"
+                    else:
+                        deductions['commission'] = comm_val
+                        
+                    deductions['mashal'] = entries['mashal'].get().strip() or "0"
+                    deductions['rent'] = entries['rent'].get().strip() or "0"
+                    deductions['cash'] = entries['cash'].get().strip() or "0"
+                    
+                    dialog.destroy()
+                    
+                    # Prepare data for invoice page
+                    owner = transfer_data[1]  # client name
+                    count = transfer_data[6]
+                    weight = transfer_data[5]
+                    item = transfer_data[3]
+                    price = transfer_data[4]
+                    equipment = transfer_data[7] if len(transfer_data) > 7 else ""
+                    
+                    # Calculate net
+                    net = 0
+                    if weight > 0:
+                        net = weight * price
+                    elif count > 0:
+                        net = count * price
+                    
+                    date = datetime.now().strftime("%Y-%m-%d")
+                    
+                    invoice_data = (owner, count, weight, item, price, f"{net:.2f}", date, equipment)
+                    
+                    # Open invoice page with deductions
+                    ReadyInvoicesPage(transfers_window, transfer_data=invoice_data, deductions=deductions)
+                    
+                except Exception as e:
+                    messagebox.showerror("خطأ", f"حدث خطأ: {e}")
+
+            btn_frame = tk.Frame(dialog, bg=self.colors['bg'])
+            btn_frame.pack(pady=20)
+            
+            tk.Button(btn_frame, text="موافق", command=confirm, font=self.fonts['button'], bg='#27AE60', fg='white', width=15).pack(side=tk.RIGHT, padx=10)
+            tk.Button(btn_frame, text="إلغاء", command=dialog.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.LEFT, padx=10)
+        
+        tk.Button(btn_frame, text="إنشاء فاتورة", command=create_invoice_from_transfer, font=self.fonts['button'], bg='#27AE60', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
+        tk.Button(btn_frame, text="إغلاق", command=transfers_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=18, height=2).pack(side=tk.LEFT, padx=10)

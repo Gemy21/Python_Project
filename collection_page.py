@@ -120,7 +120,7 @@ class CollectionPage:
         btn_container = tk.Frame(self.window, bg=self.colors['bg'])
         btn_container.pack(expand=True)
         
-        # Grid layout for 4 buttons (2x2)
+        # Grid layout for 5 buttons
         
         # Row 1
         self.create_big_button(btn_container, "إضافة تحصيل", self.open_add_collection, self.colors['accent_green'], 0, 1)
@@ -130,7 +130,10 @@ class CollectionPage:
         self.create_big_button(btn_container, "قائمة التحصيل", self.open_collection_list, '#2980B9', 1, 1) # Blue
         self.create_big_button(btn_container, "قائمة المنصرف", self.open_expense_list, '#8E44AD', 1, 0)   # Purple
         
-    def create_big_button(self, parent, text, command, color, row, col):
+        # Row 3 - Reports button centered
+        self.create_big_button(btn_container, "التقارير اليومية والشهرية", self.open_reports, '#16A085', 2, 0, columnspan=2)
+        
+    def create_big_button(self, parent, text, command, color, row, col, columnspan=1):
         btn = tk.Button(
             parent,
             text=text,
@@ -144,7 +147,7 @@ class CollectionPage:
             width=20,
             height=3
         )
-        btn.grid(row=row, column=col, padx=20, pady=20)
+        btn.grid(row=row, column=col, columnspan=columnspan, padx=20, pady=20)
         
     # --- Calculations ---
     def calculate_total_collection(self):
@@ -409,3 +412,9 @@ class CollectionPage:
         for widget in self.window.winfo_children():
             widget.destroy()
         self.setup_ui()
+
+    def open_reports(self):
+        """فتح صفحة التقارير"""
+        from reports_page import DailyReportsPage
+        DailyReportsPage(self.window)
+

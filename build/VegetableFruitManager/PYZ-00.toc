@@ -454,6 +454,7 @@
   ('ctypes.wintypes', 'C:\\Python313\\Lib\\ctypes\\wintypes.py', 'PYMODULE'),
   ('curses', 'C:\\Python313\\Lib\\curses\\__init__.py', 'PYMODULE'),
   ('curses.has_key', 'C:\\Python313\\Lib\\curses\\has_key.py', 'PYMODULE'),
+  ('data_sync', 'E:\\Project_New\\Python_Project\\data_sync.py', 'PYMODULE'),
   ('database', 'E:\\Project_New\\Python_Project\\database.py', 'PYMODULE'),
   ('dataclasses', 'C:\\Python313\\Lib\\dataclasses.py', 'PYMODULE'),
   ('datetime', 'C:\\Python313\\Lib\\datetime.py', 'PYMODULE'),
