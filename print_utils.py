@@ -131,9 +131,7 @@ class PrintPreviewWindow:
 
         # 3. الوسط: الشعار (نص مؤقت)
         center_frame = tk.Frame(header_frame, bg='white')
-        center_frame.pack(side=tk.TOP, expand=True) # Using TOP/Expand to center it between left/right if possible, or just pack it.
-        # Better approach for 3 columns in pack: Pack Left, Pack Right, then Pack remaining in Center.
-        # Since we already packed Right and Left, the remaining space is in the middle.
+        center_frame.pack(side=tk.TOP, expand=True)
         
         tk.Label(center_frame, text="🍎", font=('Arial', 40), bg='white', fg='#C0392B').pack()
         tk.Label(center_frame, text="MOHEY BAJAR", font=('Times New Roman', 14, 'bold'), bg='white', fg='#2C3E50').pack()
@@ -274,7 +272,7 @@ class PrintPreviewWindow:
             # جلب الطابعات المحلية والمتصلة بالشبكة
             flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
             printers_info = win32print.EnumPrinters(flags)
-            printers = [p[2] for p in printers_info] # الاسم موجود في الاندكس 2
+            printers = [p[2] for p in printers_info]
             
             default_printer = win32print.GetDefaultPrinter()
         except Exception as e:
@@ -323,7 +321,6 @@ class PrintPreviewWindow:
                 save_config(config)
             
             # تكوين اسم الملف
-            # التنسيق: فاتورة_اسم-البائع_التاريخ
             clean_date = datetime.now().strftime('%Y-%m-%d')
             safe_seller_name = "".join([c for c in self.data['seller_name'] if c.isalnum() or c in (' ', '_', '-')]).strip()
             base_name = f"فاتورة_{safe_seller_name}_{clean_date}"
@@ -340,162 +337,107 @@ class PrintPreviewWindow:
             
             filepath = full_path
             
+            # إعداد الخط العربي
+            font_name = "Helvetica"
+            try:
+                # محاولة تسجيل خط Arial
+                pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
+                font_name = 'Arial'
+            except:
+                try:
+                    # محاولة مسار ويندوز القياسي
+                    pdfmetrics.registerFont(TTFont('Arial', 'C:\\Windows\\Fonts\\arial.ttf'))
+                    font_name = 'Arial'
+                except:
+                    pass
+            
             # إنشاء PDF
             c = canvas.Canvas(filepath, pagesize=A4)
             width, height = A4
             
-            # محاولة تحميل خط عربي (اختياري)
-            # يمكن تخطي هذا الجزء إذا لم يكن الخط متوفر
-            
             # الرأس
-            c.setFont("Helvetica-Bold", 24)
-            c.drawCentredString(width/2, height - 2*cm, "Sales Statement")
+            c.setFont(font_name, 24)
+            c.drawCentredString(width/2, height - 2*cm, "كشف حساب")
             
-            c.setFont("Helvetica", 14)
-            c.drawCentredString(width/2, height - 3*cm, "Kholafa El Hag")
+            c.setFont(font_name, 14)
+            c.drawCentredString(width/2, height - 3*cm, "خلفاء الحاج محي غريب بعجر")
             
             # معلومات البائع
             y = height - 4.5*cm
-            c.setFont("Helvetica-Bold", 12)
-            c.drawRightString(width - 2*cm, y, f"Seller: {self.data['seller_name']}")
-            c.drawString(2*cm, y, f"Date: {self.data['invoice_date']}")
+            c.setFont(font_name, 12)
+            c.drawRightString(width - 2*cm, y, f"البائع: {self.data['seller_name']}")
+            c.drawString(2*cm, y, f"التاريخ: {self.data['invoice_date']}")
             
             # الرصيد السابق
             if self.data['old_balance'] != 0:
                 y -= 1*cm
-                c.drawString(2*cm, y, f"Previous Balance: {self.data['old_balance']:.2f} EGP")
+                c.drawRightString(width - 2*cm, y, f"الرصيد السابق: {self.data['old_balance']:.2f}")
             
             # جدول المعاملات
             y -= 2*cm
-            # جدول المعاملات
-            y -= 2*cm
-            # الترتيب الجديد: الصنف، السعر، الوزن، العدد، المبلغ
-            table_headers = ['Item', 'Price', 'Weight', 'Count', 'Amount']
-            # تعديل المسافات (A4 width approx 21cm, margins 2cm -> 17cm usable)
-            # Item(2), Price(8), Weight(11), Count(14), Amount(17)
-            x_positions = [2*cm, 9*cm, 12*cm, 15*cm, 18*cm]
             
-            c.setFont("Helvetica-Bold", 10)
-            for i, header in enumerate(table_headers):
-                c.drawString(x_positions[i], y, header)
+            # رؤوس الأعمدة (من اليمين لليسار)
+            c.setFont(font_name, 10)
+            c.drawRightString(width - 2*cm, y, "المبلغ")
+            c.drawRightString(width - 5*cm, y, "العدد")
+            c.drawRightString(width - 8*cm, y, "الوزن")
+            c.drawRightString(width - 11*cm, y, "السعر")
+            c.drawRightString(width - 14*cm, y, "الصنف")
             
             y -= 0.5*cm
             c.line(2*cm, y, width - 2*cm, y)
             
             # البيانات
-            c.setFont("Helvetica", 9)
+            c.setFont(font_name, 10)
             for trans in self.data['transactions']:
                 y -= 0.7*cm
-                if y < 3*cm:  # صفحة جديدة
+                if y < 3*cm:
                     c.showPage()
                     y = height - 2*cm
-                    c.setFont("Helvetica", 9)
+                    c.setFont(font_name, 10)
                 
-                values = [
-                    trans[0] or "",  # item
-                    f"{trans[3]:.2f}" if trans[3] else "",  # price
-                    f"{trans[1]:.2f}" if trans[1] else "",  # weight
-                    f"{trans[2]:.0f}" if trans[2] else "",  # count
-                    f"{trans[4]:.2f}" if trans[4] else "0.00",  # amount
-                ]
+                item = trans[0] or ""
+                price = f"{trans[3]:.2f}" if trans[3] else ""
+                weight = f"{trans[1]:.2f}" if trans[1] else ""
+                count = f"{trans[2]:.0f}" if trans[2] else ""
+                amount = f"{trans[4]:.2f}" if trans[4] else "0.00"
                 
-                for i, val in enumerate(values):
-                    c.drawString(x_positions[i], y, str(val))
+                c.drawRightString(width - 2*cm, y, amount)
+                c.drawRightString(width - 5*cm, y, count)
+                c.drawRightString(width - 8*cm, y, weight)
+                c.drawRightString(width - 11*cm, y, price)
+                c.drawRightString(width - 14*cm, y, item)
             
             # الإجماليات
             y -= 1.5*cm
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(2*cm, y, f"Total Invoice: {self.data['total_goods']:.2f} EGP")
+            c.setFont(font_name, 12)
+            c.drawRightString(width - 2*cm, y, f"إجمالي البضاعة: {self.data['total_goods']:.2f}")
             y -= 0.7*cm
-            c.drawString(2*cm, y, f"Paid: {self.data['total_paid']:.2f} EGP")
+            c.drawRightString(width - 2*cm, y, f"المدفوع: {self.data['total_paid']:.2f}")
             y -= 0.7*cm
-            c.drawString(2*cm, y, f"Remaining: {self.data['final_balance']:.2f} EGP")
+            c.drawRightString(width - 2*cm, y, f"المتبقي: {self.data['final_balance']:.2f}")
             
             c.save()
             messagebox.showinfo("نجاح", f"تم حفظ PDF بنجاح:\n{filepath}")
             
         except ImportError:
-            messagebox.showerror(
-                "خطأ",
-                "المكتبة 'reportlab' غير مثبتة.\nالرجاء تثبيتها باستخدام:\npip install reportlab"
-            )
+            messagebox.showerror("خطأ", "مكتبة reportlab غير مثبتة")
         except Exception as e:
             messagebox.showerror("خطأ", f"فشل حفظ PDF:\n{e}")
     
     def print_direct(self):
-        """طباعة مباشرة (Windows)"""
+        """طباعة مباشرة (Windows) باستخدام GDI لدعم العربية"""
         try:
             import win32print
             import win32ui
-            from PIL import Image, ImageDraw, ImageFont, ImageWin
+            import win32con
             
-            # إنشاء صورة للفاتورة
-            img_width, img_height = 800, 1000
-            img = Image.new('RGB', (img_width, img_height), 'white')
-            draw = ImageDraw.Draw(img)
-            
-            # استخدام خط افتراضي
-            try:
-                font_title = ImageFont.truetype("arial.ttf", 32)
-                font_header = ImageFont.truetype("arial.ttf", 20)
-                font_normal = ImageFont.truetype("arial.ttf", 14)
-            except:
-                font_title = ImageFont.load_default()
-                font_header = ImageFont.load_default()
-                font_normal = ImageFont.load_default()
-            
-            y = 50
-            
-            # الرأس
-            draw.text((img_width//2 - 100, y), "Sales Statement", fill='black', font=font_title)
-            y += 50
-            draw.text((img_width//2 - 80, y), "Kholafa El Hag", fill='black', font=font_header)
-            y += 60
-            
-            # البائع والتاريخ
-            draw.text((50, y), f"Seller: {self.data['seller_name']}", fill='black', font=font_normal)
-            draw.text((500, y), f"Date: {self.data['invoice_date']}", fill='black', font=font_normal)
-            y += 40
-            
-            # جدول مبسط
-            # الترتيب الجديد: الصنف، السعر، الوزن، العدد، المبلغ
-            header_text = f"{'Item':<20} | {'Price':<10} | {'Weight':<10} | {'Count':<10} | {'Amount':<10}"
-            draw.text((50, y), header_text, fill='black', font=font_normal)
-            y += 30
-            draw.line((50, y, img_width - 50, y), fill='black', width=2)
-            y += 20
-            
-            for trans in self.data['transactions'][:25]:  # أول 25 معاملة
-                # trans: item, weight, count, price, amount, status
-                item = str(trans[0])[:20]
-                price = f"{trans[3]:.2f}" if trans[3] else "0"
-                weight = f"{trans[1]:.2f}" if trans[1] else "0"
-                count = f"{trans[2]:.0f}" if trans[2] else "0"
-                amount = f"{trans[4]:.2f}" if trans[4] else "0"
-                
-                row_text = f"{item:<20} | {price:<10} | {weight:<10} | {count:<10} | {amount:<10}"
-                draw.text((50, y), row_text, fill='black', font=font_normal)
-                y += 25
-            
-            y += 30
-            draw.text((50, y), f"Total: {self.data['total_goods']:.2f} EGP", fill='black', font=font_header)
-            y += 30
-            draw.text((50, y), f"Paid: {self.data['total_paid']:.2f} EGP", fill='black', font=font_header)
-            y += 30
-            draw.text((50, y), f"Remaining: {self.data['final_balance']:.2f} EGP", fill='black', font=font_header)
-            
-            # حفظ مؤقت
-            temp_file = "temp_invoice.bmp"
-            img.save(temp_file, "BMP")
-            
-            # الطباعة
             printer_name = self.printer_var.get()
             if not printer_name:
-                # محاولة استخدام الافتراضية إذا لم يتم الاختيار
                 printer_name = win32print.GetDefaultPrinter()
             
             if not printer_name:
-                messagebox.showwarning("تنبيه", "الرجاء اختيار طابعة أو تعيين طابعة افتراضية")
+                messagebox.showwarning("تنبيه", "الرجاء اختيار طابعة")
                 return
 
             hprinter = win32print.OpenPrinter(printer_name)
@@ -503,43 +445,164 @@ class PrintPreviewWindow:
             try:
                 hdc = win32ui.CreateDC()
                 hdc.CreatePrinterDC(printer_name)
-                hdc.StartDoc("Invoice")
+                
+                hdc.StartDoc("فاتورة مبيعات")
                 hdc.StartPage()
                 
-                # رسم الصورة
-                bmp = Image.open(temp_file)
-                dib = ImageWin.Dib(bmp)
+                # مقاييس الصفحة
+                horz_res = hdc.GetDeviceCaps(8)  # HORZRES
+                vert_res = hdc.GetDeviceCaps(10)  # VERTRES
                 
-                # تحجيم الصورة لتناسب الصفحة
-                # الحصول على أبعاد الصفحة القابلة للطباعة
-                horz_res = hdc.GetDeviceCaps(110) # HORZRES
-                vert_res = hdc.GetDeviceCaps(111) # VERTRES
+                # هوامش
+                margin_x = int(horz_res * 0.05)
+                margin_y = int(vert_res * 0.05)
+                width = horz_res - 2 * margin_x
                 
-                # حساب الحجم المناسب (ملء العرض)
-                # img_width, img_height هي أبعاد الصورة الأصلية
-                # نريد عرض الصورة = عرض الصفحة
+                y = margin_y
                 
-                scale = horz_res / img_width
-                scaled_height = int(img_height * scale)
+                # الخطوط (Charset 178 = Arabic)
+                font_title = win32ui.CreateFont({
+                    "name": "Arial",
+                    "height": int(vert_res * 0.03),
+                    "weight": 700,
+                    "charset": 178
+                })
                 
-                # إذا كان الطول أكبر من الصفحة، قد نحتاج لتقليصه أو قصّه (هنا سنطبعه كما هو وقد يتم قصه)
-                # الأفضل طباعته بحجم مناسب
+                font_header = win32ui.CreateFont({
+                    "name": "Arial",
+                    "height": int(vert_res * 0.02),
+                    "weight": 700,
+                    "charset": 178
+                })
                 
-                dib.draw(hdc.GetHandleOutput(), (0, 0, horz_res, scaled_height))
+                font_normal = win32ui.CreateFont({
+                    "name": "Arial",
+                    "height": int(vert_res * 0.015),
+                    "weight": 400,
+                    "charset": 178
+                })
                 
+                # دوال مساعدة للكتابة
+                def draw_text_centered(text, y_pos, font):
+                    hdc.SelectObject(font)
+                    size = hdc.GetTextExtent(text)
+                    x_pos = (horz_res - size[0]) // 2
+                    hdc.TextOut(x_pos, y_pos, text)
+                    return size[1]
+
+                def draw_text_right(text, x_right, y_pos, font):
+                    hdc.SelectObject(font)
+                    size = hdc.GetTextExtent(text)
+                    x_pos = x_right - size[0]
+                    hdc.TextOut(x_pos, y_pos, text)
+                    return size[1]
+                
+                def draw_text_left(text, x_left, y_pos, font):
+                    hdc.SelectObject(font)
+                    hdc.TextOut(x_left, y_pos, text)
+                    return hdc.GetTextExtent(text)[1]
+
+                # الرأس
+                y += draw_text_centered("كشف حساب بائع", y, font_title) + int(vert_res * 0.005)
+                y += draw_text_centered("خلفاء الحاج محي غريب بعجر", y, font_header) + int(vert_res * 0.01)
+                
+                # معلومات
+                hdc.SelectObject(font_normal)
+                line_height = hdc.GetTextExtent("A")[1]
+                
+                # التاريخ (يسار) والبائع (يمين)
+                draw_text_left(f"التاريخ: {self.data['invoice_date']}", margin_x, y, font_normal)
+                draw_text_right(f"البائع: {self.data['seller_name']}", horz_res - margin_x, y, font_normal)
+                
+                y += line_height * 2
+                
+                # جدول - الأعمدة من اليمين لليسار
+                cols = [
+                    ("الصنف", 0.35),
+                    ("السعر", 0.15),
+                    ("الوزن", 0.15),
+                    ("العدد", 0.15),
+                    ("المبلغ", 0.20)
+                ]
+                
+                # رسم رأس الجدول
+                current_x = horz_res - margin_x
+                hdc.SelectObject(font_header)
+                
+                # خط علوي
+                hdc.MoveTo(margin_x, y)
+                hdc.LineTo(horz_res - margin_x, y)
+                
+                row_height = int(line_height * 1.5)
+                text_y = y + (row_height - line_height) // 2
+                
+                x_positions = []
+                
+                for title, ratio in cols:
+                    col_width = int(width * ratio)
+                    col_center = current_x - (col_width // 2)
+                    size = hdc.GetTextExtent(title)
+                    hdc.TextOut(col_center - (size[0]//2), text_y, title)
+                    
+                    x_positions.append((current_x, col_width))
+                    current_x -= col_width
+                
+                y += row_height
+                hdc.MoveTo(margin_x, y)
+                hdc.LineTo(horz_res - margin_x, y)
+                
+                # البيانات
+                hdc.SelectObject(font_normal)
+                
+                for trans in self.data['transactions']:
+                    # التحقق من نهاية الصفحة
+                    if y > vert_res - margin_y - (line_height * 5):
+                        hdc.EndPage()
+                        hdc.StartPage()
+                        y = margin_y
+                    
+                    item = str(trans[0])
+                    price = f"{trans[3]:.2f}" if trans[3] else ""
+                    weight = f"{trans[1]:.2f}" if trans[1] else ""
+                    count = f"{trans[2]:.0f}" if trans[2] else ""
+                    amount = f"{trans[4]:.2f}" if trans[4] else ""
+                    
+                    row_vals = [item, price, weight, count, amount]
+                    
+                    text_y = y + (row_height - line_height) // 2
+                    
+                    for i, val in enumerate(row_vals):
+                        start_x, col_w = x_positions[i]
+                        size = hdc.GetTextExtent(str(val))
+                        center_x = start_x - (col_w // 2) - (size[0] // 2)
+                        hdc.TextOut(center_x, text_y, str(val))
+                    
+                    y += row_height
+
+                y += int(line_height * 0.5)
+                hdc.MoveTo(margin_x, y)
+                hdc.LineTo(horz_res - margin_x, y)
+                y += int(line_height * 0.5)
+                
+                # الإجماليات
+                hdc.SelectObject(font_header)
+                
+                def draw_total_row(label, value):
+                    nonlocal y
+                    draw_text_right(f"{label}: {value}", horz_res - margin_x, y, font_header)
+                    y += int(line_height * 1.5)
+
+                draw_total_row("إجمالي البضاعة", f"{self.data['total_goods']:.2f}")
+                draw_total_row("المدفوع", f"{self.data['total_paid']:.2f}")
+                draw_total_row("المتبقي", f"{self.data['final_balance']:.2f}")
+
                 hdc.EndPage()
                 hdc.EndDoc()
+                
             finally:
                 win32print.ClosePrinter(hprinter)
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-            
+                
             messagebox.showinfo("نجاح", "تم إرسال الفاتورة للطابعة")
-            
-        except ImportError:
-            messagebox.showerror(
-                "خطأ",
-                "المكتبات المطلوبة غير مثبتة.\nالرجاء تثبيت:\npip install pywin32 pillow"
-            )
+
         except Exception as e:
             messagebox.showerror("خطأ", f"فشلت الطباعة:\n{e}")
