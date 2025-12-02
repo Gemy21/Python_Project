@@ -41,57 +41,27 @@ class SellersPage:
         self.setup_ui()
         
     def setup_ui(self):
-        # Header
+        # Header with Close Button
         header_frame = tk.Frame(self.window, bg=self.colors['header_bg'], height=80)
         header_frame.pack(fill=tk.X)
         header_frame.pack_propagate(False)
         
-        tk.Label(header_frame, text="برنامج البائعين", font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(pady=20)
+        # Title in center
+        tk.Label(header_frame, text="برنامج البائعين", font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, expand=True, pady=20)
         
-        # Top Buttons Row
-        top_buttons_frame = tk.Frame(self.window, bg=self.colors['bg'], pady=10)
-        top_buttons_frame.pack(fill=tk.X)
-        
-        # Right side buttons
-        right_btns = tk.Frame(top_buttons_frame, bg=self.colors['bg'])
-        right_btns.pack(side=tk.RIGHT, padx=20)
-        
-        tk.Button(right_btns, text="إضافة فردي", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(right_btns, text="بحث", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(right_btns, text="تعديل", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        
-        # Left side buttons
-        left_btns = tk.Frame(top_buttons_frame, bg=self.colors['bg'])
-        left_btns.pack(side=tk.LEFT, padx=20)
-        
-        tk.Button(left_btns, text="طباعة", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(left_btns, text="بيع", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        tk.Button(left_btns, text="حساب", bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=12, height=1, relief=tk.RAISED, bd=2).pack(side=tk.LEFT, padx=5)
-        
-        # Input Section (Below buttons)
-        input_section = tk.Frame(self.window, bg=self.colors['bg'], pady=10)
-        input_section.pack(fill=tk.X, padx=20)
-        
-        # Date and Total on right
-        right_info = tk.Frame(input_section, bg=self.colors['bg'])
-        right_info.pack(side=tk.RIGHT)
-        
-        tk.Label(right_info, text="التاريخ", font=self.fonts['label'], bg=self.colors['yellow'], width=10, relief=tk.RAISED).pack(side=tk.LEFT, padx=2)
-        date_entry = tk.Entry(right_info, font=self.fonts['entry'], justify='center', width=12, bg='white')
-        date_entry.insert(0, datetime.now().strftime("%Y/%m/%d"))
-        date_entry.pack(side=tk.LEFT, padx=2)
-        
-        tk.Label(right_info, text="إجمالي", font=self.fonts['label'], bg=self.colors['yellow'], width=10, relief=tk.RAISED).pack(side=tk.LEFT, padx=(20, 2))
-        total_entry = tk.Entry(right_info, font=self.fonts['entry'], justify='center', width=12, bg='#FF6B6B')
-        total_entry.insert(0, "0")
-        total_entry.pack(side=tk.LEFT, padx=2)
-        
-        # Input fields on left
-        left_inputs = tk.Frame(input_section, bg=self.colors['bg'])
-        left_inputs.pack(side=tk.LEFT)
-        
-        tk.Label(left_inputs, text="تعديل السعر الحالي", font=self.fonts['label'], bg=self.colors['yellow'], width=15, relief=tk.RAISED).pack(side=tk.LEFT, padx=2)
-        tk.Entry(left_inputs, font=self.fonts['entry'], justify='center', width=10, bg='white').pack(side=tk.LEFT, padx=2)
+        # Close button on the right
+        tk.Button(
+            header_frame, 
+            text="إغلاق", 
+            command=self.window.destroy, 
+            bg=self.colors['button_bg'], 
+            fg='white', 
+            font=self.fonts['button'], 
+            width=12, 
+            height=1, 
+            relief=tk.RAISED, 
+            bd=2
+        ).pack(side=tk.RIGHT, padx=20, pady=20)
         
         # Table Section
         table_container = tk.Frame(self.window, bg=self.colors['bg'], padx=20, pady=10)
@@ -110,8 +80,8 @@ class SellersPage:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Table Headers (Right to Left)
-        headers = ['#', 'اسم البائع', 'العدد', 'الصنف', 'الوزن', 'السعر', 'الإجمالي', 'التاريخ', 'اسم النقلة', 'ملاحظات', 'حذف']
+        # Table Headers (Right to Left) - Removed shipment and notes columns
+        headers = ['#', 'اسم البائع', 'العدد', 'الصنف', 'الوزن', 'السعر', 'الإجمالي', 'التاريخ', 'حذف']
         header_colors = [
             self.colors['blue'],      # #
             self.colors['green'],     # اسم البائع
@@ -121,8 +91,6 @@ class SellersPage:
             self.colors['yellow'],    # السعر
             self.colors['blue'],      # الإجمالي
             self.colors['yellow'],    # التاريخ
-            self.colors['green'],     # اسم النقلة
-            self.colors['yellow'],    # ملاحظات
             self.colors['blue']       # حذف
         ]
         
@@ -141,14 +109,6 @@ class SellersPage:
         
         # Load data rows
         self.load_data(scrollable_frame, header_colors)
-        
-        # Bottom Section
-        bottom_frame = tk.Frame(self.window, bg=self.colors['bg'], height=60)
-        bottom_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        bottom_frame.pack_propagate(False)
-        
-        # Close button
-        tk.Button(bottom_frame, text="إغلاق", command=self.window.destroy, bg=self.colors['button_bg'], fg='white', font=self.fonts['button'], width=15, height=1, relief=tk.RAISED, bd=2).pack(pady=10)
         
     def load_data(self, parent, colors):
         # Get data from agriculture transfers
@@ -173,19 +133,24 @@ class SellersPage:
             num_lbl = tk.Label(parent, text=str(i+1), bg=colors[0], **entry_style)
             num_lbl.grid(row=i+1, column=0, sticky='nsew', padx=1, pady=1, ipady=5)
             
+            row_id = None
             if row_data:
-                # row_data: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, type
+                # row_data: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, type, created_at
+                row_id = row_data[0]
                 seller = row_data[2] or ""
                 count = row_data[6] or 0
                 item = row_data[3] or ""
                 weight = row_data[5] or 0
                 price = row_data[4] or 0
                 total = weight * price if weight and price else 0
-                shipment = row_data[1] or ""
                 
-                values = [seller, count, item, weight, price, f"{total:.2f}", "", shipment, "", ""]
+                # Get date from created_at (assuming it's at index 9 or we use current date)
+                date = datetime.now().strftime("%Y/%m/%d")  # Default to today
+                
+                # Values: seller, count, item, weight, price, total, date
+                values = [seller, count, item, weight, price, f"{total:.2f}", date]
             else:
-                values = ["", "", "", "", "", "", "", "", "", ""]
+                values = ["", "", "", "", "", "", ""]
             
             for col_idx, val in enumerate(values, start=1):
                 e = tk.Entry(parent, **entry_style, bg=colors[col_idx])
@@ -193,8 +158,28 @@ class SellersPage:
                 e.grid(row=i+1, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=5)
                 row_entries.append(e)
             
-            # Delete button
-            del_btn = tk.Button(parent, text="X", bg='#E74C3C', fg='white', font=('Arial', 10, 'bold'), width=3)
-            del_btn.grid(row=i+1, column=10, sticky='nsew', padx=1, pady=1)
+            # Delete button - functional
+            def make_delete_handler(transfer_id, row_idx):
+                def delete_row():
+                    if transfer_id:
+                        if messagebox.askyesno("تأكيد الحذف", "هل أنت متأكد من حذف هذا السجل؟"):
+                            self.db.delete_agriculture_transfer(transfer_id)
+                            # Refresh the page
+                            for widget in parent.winfo_children():
+                                widget.destroy()
+                            self.setup_ui()
+                return delete_row
+            
+            del_btn = tk.Button(
+                parent, 
+                text="X", 
+                bg='#E74C3C', 
+                fg='white', 
+                font=('Arial', 10, 'bold'), 
+                width=3,
+                command=make_delete_handler(row_id, i) if row_id else None,
+                cursor='hand2' if row_id else 'arrow'
+            )
+            del_btn.grid(row=i+1, column=8, sticky='nsew', padx=1, pady=1)
             
             self.table_rows.append(row_entries)

@@ -67,6 +67,7 @@ class CollectionPage:
         # Calculate Totals
         total_collection = self.calculate_total_collection()
         total_expenses = self.calculate_total_expenses()
+        daily_profit = self.calculate_daily_profit()
         
         # Collection Card (Right)
         self.create_stat_card(
@@ -74,6 +75,15 @@ class CollectionPage:
             "إجمالي التحصيل", 
             f"{total_collection:,.2f}", 
             self.colors['accent_green'], 
+            tk.RIGHT
+        )
+        
+        # Daily Profit Card (Center)
+        self.create_stat_card(
+            stats_frame, 
+            "صافي ربح اليوم", 
+            f"{daily_profit:,.2f}", 
+            '#F39C12',
             tk.RIGHT
         )
         
@@ -139,11 +149,12 @@ class CollectionPage:
     # --- Calculations ---
     def calculate_total_collection(self):
         """
-        Calculate total collection: Sum of seller transactions where status='مدفوع'
+        Calculate total collection: Sum of seller transfers (agriculture transfers to sellers)
+        This is the value of goods transferred to sellers (status='متبقي')
         """
         conn = self.db.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT SUM(amount) FROM seller_transactions WHERE status='مدفوع'")
+        cursor.execute("SELECT SUM(amount) FROM seller_transactions WHERE status='متبقي'")
         result = cursor.fetchone()[0]
         conn.close()
         return result if result else 0.0
@@ -180,6 +191,18 @@ class CollectionPage:
         conn.close()
         
         return total_expenses + total_invoices
+
+    def calculate_daily_profit(self):
+        """
+        Calculate daily profit: Sum of payments received today (status='مدفوع')
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT SUM(amount) FROM seller_transactions WHERE status='مدفوع' AND date=?", (today,))
+        result = cursor.fetchone()[0]
+        conn.close()
+        return result if result else 0.0
 
     # --- Actions ---
     def open_add_collection(self):

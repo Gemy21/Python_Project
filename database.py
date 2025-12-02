@@ -230,6 +230,22 @@ class Database:
         except sqlite3.OperationalError:
             pass # العمود موجود بالفعل
 
+        # جدول فواتير العملاء
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS client_invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_name TEXT,
+                nolon REAL DEFAULT 0,
+                commission TEXT DEFAULT '10%',
+                mashal REAL DEFAULT 0,
+                rent REAL DEFAULT 0,
+                cash REAL DEFAULT 0,
+                invoice_date TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         conn.commit()
         conn.close()
         print("تم تهيئة قاعدة البيانات بنجاح")
@@ -375,6 +391,38 @@ class Database:
         results = cursor.fetchall()
         conn.close()
         return results
+
+    def add_client_account(self, client_name, phone=""):
+        """إضافة حساب عميل جديد"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Ensure table exists
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clients_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT NOT NULL UNIQUE,
+                balance REAL DEFAULT 0,
+                phone TEXT
+            )
+        ''')
+        
+        try:
+            cursor.execute('INSERT INTO clients_accounts (client_name, balance, phone) VALUES (?, 0, ?)', (client_name, phone))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+        finally:
+            conn.close()
+
+    def delete_client_account(self, client_id):
+        """حذف حساب عميل"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM clients_accounts WHERE id = ?', (client_id,))
+        conn.commit()
+        conn.close()
 
     def get_unique_shipment_names(self):
         """جلب أسماء النقلات الفريدة من جدول ترحيل الزراعة"""
@@ -615,3 +663,49 @@ class Database:
         cursor.execute('DELETE FROM expenses WHERE id = ?', (expense_id,))
         conn.commit()
         conn.close()
+
+    # --- طرق التعامل مع فواتير العملاء ---
+
+    def save_client_invoice(self, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount=0, final_total=0):
+        """حفظ فاتورة عميل جديدة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if table has net_amount and final_total columns, if not, add them
+        cursor.execute("PRAGMA table_info(client_invoices)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'net_amount' not in columns:
+            cursor.execute('ALTER TABLE client_invoices ADD COLUMN net_amount REAL DEFAULT 0')
+        if 'final_total' not in columns:
+            cursor.execute('ALTER TABLE client_invoices ADD COLUMN final_total REAL DEFAULT 0')
+        
+        cursor.execute('''
+            INSERT INTO client_invoices (owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total))
+        invoice_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return invoice_id
+
+    def update_client_invoice(self, invoice_id, owner_name, nolon, commission, mashal, rent, cash, invoice_date):
+        """تحديث فاتورة عميل"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE client_invoices 
+            SET owner_name=?, nolon=?, commission=?, mashal=?, rent=?, cash=?, invoice_date=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        ''', (owner_name, nolon, commission, mashal, rent, cash, invoice_date, invoice_id))
+        conn.commit()
+        conn.close()
+
+    def get_latest_client_invoice(self):
+        """جلب آخر فاتورة عميل"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, owner_name, nolon, commission, mashal, rent, cash, invoice_date FROM client_invoices ORDER BY id DESC LIMIT 1')
+        result = cursor.fetchone()
+        conn.close()
+        return result

@@ -564,11 +564,11 @@ class CurrentAccountPage:
         
         # تعريف الأعمدة
         # تعريف الأعمدة (تم التحديث حسب الصورة)
-        # من اليمين لليسار: المبلغ، الحالة، العدد، الوزن، السعر، الصنف، التاريخ، اليوم، العدة
+        # من اليمين لليسار: المبلغ، الحالة، العدد، الوزن، السعر، الصنف، التاريخ، العدة
         # في الكود (0-based index):
-        # 0: العدة, 1: اليوم, 2: التاريخ, 3: الصنف, 4: السعر, 5: الوزن, 6: العدد, 7: الحالة, 8: المبلغ
+        # 0: العدة, 1: التاريخ, 2: الصنف, 3: السعر, 4: الوزن, 5: العدد, 6: الحالة, 7: المبلغ
         self.headers = [
-            "العدة", "اليوم", "التاريخ", "الصنف", 
+            "العدة", "التاريخ", "الصنف", 
             "السعر", "الوزن", "العدد", "الحالة", "المبلغ"
         ]
         
@@ -644,39 +644,174 @@ class CurrentAccountPage:
         self.canvas.itemconfig(self.canvas_frame_id, width=event.width)
 
     # --- وظائف الأزرار ---
-    def collect_equipment(self): messagebox.showinfo("تحصيل عدة", "سيتم التنفيذ قريباً")
-    def edit_meal(self): messagebox.showinfo("تعديل", "يمكنك التعديل مباشرة في الجدول ثم الضغط على حفظ")
-    def edit_payment(self): messagebox.showinfo("تعديل", "يمكنك تعديل مبلغ الدفع في الجدول مباشرة")
-    def open_add_payment_dialog(self):
-        """فتح نافذة إضافة دفع"""
+    def collect_equipment(self):
+        """فتح نافذة تحصيل عدة"""
         dialog = tk.Toplevel(self.window)
-        dialog.title("إضافة دفع أو خصم")
-        dialog.geometry("800x250") # Increased size
-        bg_color = self.colors.get('pink', '#F5CBA7')  # Fallback to light orange
+        dialog.title("تحصيل عدة")
+        dialog.geometry("520x386")
+        bg_color = self.colors.get('pink', '#F5CBA7')
+        dialog.configure(bg=bg_color)
+        
+        # توسيط النافذة
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 260
+        y = (dialog.winfo_screenheight() // 2) - 193
+        dialog.geometry(f"520x386+{x}+{y}")
+        
+        # العنوان
+        tk.Label(dialog, text="اختر نوع العدة والكمية", font=('Playpen Sans Arabic', 16, 'bold'), 
+                bg=bg_color, fg='#2C3E50').pack(pady=10)
+        
+        # إطار القائمة
+        list_frame = tk.Frame(dialog, bg='white', relief=tk.SUNKEN, bd=2)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # جلب أنواع العدة من قاعدة البيانات
+        equipment_items = self.db.get_all_inventory()
+        
+        if not equipment_items:
+            tk.Label(list_frame, text="لا توجد أنواع عدة مسجلة", font=('Arial', 14), 
+                    bg='white', fg='red').pack(pady=50)
+            tk.Button(dialog, text="إغلاق", command=dialog.destroy, 
+                     bg='#C0392B', fg='white', font=('Arial', 12, 'bold'), 
+                     width=15).pack(pady=10)
+            return
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Listbox لعرض أنواع العدة
+        equipment_listbox = tk.Listbox(list_frame, font=('Arial', 14), 
+                                       yscrollcommand=scrollbar.set, 
+                                       justify='right', height=10)
+        equipment_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        scrollbar.config(command=equipment_listbox.yview)
+        
+        # ملء القائمة
+        equipment_dict = {}
+        for item in equipment_items:
+            # item: (id, name, quantity, price)
+            display_text = f"{item[1]} - السعر: {item[3]} ج.م - المتاح: {item[2]}"
+            equipment_listbox.insert(tk.END, display_text)
+            equipment_dict[display_text] = item
+        
+        # إطار الإدخال
+        input_frame = tk.Frame(dialog, bg=bg_color)
+        input_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        tk.Label(input_frame, text="الكمية:", font=('Arial', 14, 'bold'), 
+                bg=bg_color).pack(side=tk.RIGHT, padx=5)
+        
+        quantity_entry = tk.Entry(input_frame, font=('Arial', 14), 
+                                 justify='center', width=15)
+        quantity_entry.pack(side=tk.RIGHT, padx=5)
+        quantity_entry.insert(0, "1")
+        
+        def confirm_equipment():
+            selection = equipment_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("تنبيه", "الرجاء اختيار نوع العدة")
+                return
+            
+            selected_text = equipment_listbox.get(selection[0])
+            selected_item = equipment_dict[selected_text]
+            
+            try:
+                quantity = int(quantity_entry.get())
+                if quantity <= 0:
+                    messagebox.showerror("خطأ", "الرجاء إدخال كمية صحيحة")
+                    return
+                
+                # حساب التكلفة
+                item_id, item_name, available_qty, item_price = selected_item
+                total_cost = item_price * quantity
+                
+                # إضافة معاملة للعدة
+                from datetime import datetime
+                today = datetime.now().strftime("%Y-%m-%d")
+                
+                note = f"تحصيل {quantity} {item_name}"
+                
+                # إضافة كمعاملة بضاعة (ليست مدفوع)
+                self.db.add_seller_transaction(
+                    self.seller_id, total_cost, "متبقي", quantity, 0, item_price,
+                    item_name, today, "", item_name, note
+                )
+                
+                # تحديث كمية العدة في المخزون (تقليل)
+                self.db.update_inventory_quantity(item_id, -quantity)
+                
+                dialog.destroy()
+                
+                # إعادة تحميل البيانات
+                for row_entries in self.rows:
+                    for entry in row_entries:
+                        entry.destroy()
+                self.rows = []
+                
+                for widget in self.scrollable_frame.winfo_children():
+                    if int(widget.grid_info()['row']) > 0:
+                        widget.destroy()
+                
+                self.load_data()
+                messagebox.showinfo("نجاح", f"تم تحصيل {quantity} {item_name} بمبلغ {total_cost} ج.م")
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال كمية صحيحة")
+        
+        # أزرار التأكيد والإلغاء
+        buttons_frame = tk.Frame(dialog, bg=bg_color)
+        buttons_frame.pack(pady=10)
+        
+        tk.Button(buttons_frame, text="تأكيد", command=confirm_equipment, 
+                 bg='#27AE60', fg='white', font=('Arial', 12, 'bold'), 
+                 width=15).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(buttons_frame, text="إلغاء", command=dialog.destroy, 
+                 bg='#C0392B', fg='white', font=('Arial', 12, 'bold'), 
+                 width=15).pack(side=tk.LEFT, padx=5)
+        
+        dialog.bind('<Return>', lambda e: confirm_equipment())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+    
+    def edit_meal(self): messagebox.showinfo("تعديل", "يمكنك التعديل مباشرة في الجدول ثم الضغط على حفظ")
+    
+    def edit_payment(self):
+        """فتح نافذة تعديل الدفع"""
+        dialog = tk.Toplevel(self.window)
+        dialog.title("تعديل الدفع")
+        dialog.geometry("800x250")
+        bg_color = self.colors.get('pink', '#F5CBA7')
         dialog.configure(bg=bg_color)
         
         # توسيط
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (400)
-        y = (dialog.winfo_screenheight() // 2) - (125)
+        x = (dialog.winfo_screenwidth() // 2) - 400
+        y = (dialog.winfo_screenheight() // 2) - 125
         dialog.geometry(f"800x250+{x}+{y}")
+
+        # حساب المبلغ الإجمالي المدفوع حالياً (بدون السماح)
+        transactions = self.db.get_seller_transactions(self.seller_id)
+        current_total_paid = 0.0
+        for trans in transactions:
+            # trans: id, amount, status, count, weight, price, item_name, date, day_name, equipment, note
+            if trans[2] == "مدفوع" and trans[6] != "سماح":  # status == مدفوع AND item_name != سماح
+                current_total_paid += trans[1]  # amount
 
         # إطار رئيسي
         main_frame = tk.Frame(dialog, bg=bg_color)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
         # العناوين (شريط أصفر)
-        headers_frame = tk.Frame(main_frame, bg='#F1C40F') # Yellow
+        headers_frame = tk.Frame(main_frame, bg='#F1C40F')
         headers_frame.pack(fill=tk.X, pady=(0, 5))
-        
-        # استخدام pack للتوزيع المتساوي
-        # العناوين: ملحوظة (يسار)، سماح (وسط)، دفع (يمين)
         
         lbl_style = {'font': ('Arial', 14, 'bold'), 'bg': '#F1C40F', 'fg': 'black', 'pady': 10}
         
         tk.Label(headers_frame, text="ملحوظة", **lbl_style).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Label(headers_frame, text="سماح", **lbl_style).pack(side=tk.LEFT, expand=True, fill=tk.X)
-        tk.Label(headers_frame, text="دفع", **lbl_style).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        tk.Label(headers_frame, text="المبلغ الكلي المدفوع", **lbl_style).pack(side=tk.LEFT, expand=True, fill=tk.X)
         
         # الحقول (شريط أبيض/رمادي)
         inputs_frame = tk.Frame(main_frame, bg='#ECF0F1')
@@ -684,10 +819,13 @@ class CurrentAccountPage:
         
         entry_style = {'font': ('Arial', 14), 'justify': 'center', 'relief': tk.FLAT}
         
-        # حاويات للحقول لضمان التناسق مع العناوين
-        f1 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID); f1.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-        f2 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID); f2.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
-        f3 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID); f3.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+        # حاويات للحقول
+        f1 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID)
+        f1.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+        f2 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID)
+        f2.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
+        f3 = tk.Frame(inputs_frame, bg='#ECF0F1', bd=1, relief=tk.SOLID)
+        f3.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
 
         entry_note = tk.Entry(f1, **entry_style)
         entry_note.pack(fill=tk.BOTH, expand=True, ipady=5)
@@ -695,14 +833,18 @@ class CurrentAccountPage:
         entry_discount = tk.Entry(f2, **entry_style)
         entry_discount.pack(fill=tk.BOTH, expand=True, ipady=5)
         
-        entry_payment = tk.Entry(f3, **entry_style)
-        entry_payment.pack(fill=tk.BOTH, expand=True, ipady=5)
+        entry_total_payment = tk.Entry(f3, **entry_style)
+        entry_total_payment.pack(fill=tk.BOTH, expand=True, ipady=5)
         
-        # التركيز على الدفع
-        entry_payment.focus()
+        # ملء المبلغ الحالي
+        entry_total_payment.insert(0, f"{current_total_paid:.2f}")
+        
+        # التركيز على المبلغ الكلي
+        entry_total_payment.focus()
+        entry_total_payment.select_range(0, tk.END)
 
-        def confirm_payment():
-            payment_str = entry_payment.get().strip()
+        def confirm_edit():
+            new_total_payment_str = entry_total_payment.get().strip()
             discount_str = entry_discount.get().strip()
             note = entry_note.get().strip()
             
@@ -711,122 +853,384 @@ class CurrentAccountPage:
             
             added = False
             
-            # إضافة الدفع
-            if payment_str:
+            # تعديل المبلغ الكلي المدفوع
+            if new_total_payment_str:
                 try:
-                    amount = float(payment_str)
-                    item_name = f"دفعة نقدية {('(' + note + ')') if note else ''}"
-                    # (seller_id, amount, status, count, weight, price, item_name, date, day_name, equipment, note)
-                    self.db.add_seller_transaction(
-                        self.seller_id, amount, "مدفوع", 0, 0, 0, item_name, today, "", "", note
-                    )
-                    added = True
+                    new_total = float(new_total_payment_str)
+                    difference = new_total - current_total_paid
+                    
+                    if abs(difference) > 0.01:  # إذا كان هناك فرق
+                        if difference > 0:
+                            # إضافة دفع إضافي
+                            item_name = f"تعديل دفع - إضافة {('(' + note + ')') if note else ''}"
+                        else:
+                            # خصم من الدفع (إرجاع)
+                            item_name = f"تعديل دفع - خصم {('(' + note + ')') if note else ''}"
+                        
+                        self.db.add_seller_transaction(
+                            self.seller_id, abs(difference), "مدفوع" if difference > 0 else "متبقي", 
+                            0, 0, 0, item_name, today, "", "", note
+                        )
+                        added = True
                 except ValueError:
                     messagebox.showerror("خطأ", "الرجاء إدخال مبلغ دفع صحيح")
                     return
 
-            # إضافة السماح
+            # إضافة السماح (يُخصم من المتبقي)
             if discount_str:
                 try:
                     amount = float(discount_str)
-                    item_name = f"سماح {('(' + note + ')') if note else ''}"
-                    self.db.add_seller_transaction(
-                        self.seller_id, amount, "مدفوع", 0, 0, 0, item_name, today, "", "", note
-                    )
-                    added = True
+                    if amount > 0:
+                        item_name = "سماح"
+                        self.db.add_seller_transaction(
+                            self.seller_id, amount, "سماح", 0, 0, 0, item_name, today, "", "", note
+                        )
+                        added = True
                 except ValueError:
                     messagebox.showerror("خطأ", "الرجاء إدخال مبلغ سماح صحيح")
                     return
 
             if added:
                 dialog.destroy()
-                # إعادة تحميل البيانات لتحديث الجدول والإجماليات
-                # أولاً مسح الجدول الحالي
+                # إعادة تحميل البيانات
                 for row_entries in self.rows:
                     for entry in row_entries:
                         entry.destroy()
                 self.rows = []
-                # مسح محتوى الـ scrollable_frame للتأكد (العناوين ثابتة لكن الصفوف متغيرة)
+                
                 for widget in self.scrollable_frame.winfo_children():
-                    if int(widget.grid_info()['row']) > 0: # إبقاء العناوين (row 0)
+                    if int(widget.grid_info()['row']) > 0:
+                        widget.destroy()
+                
+                self.load_data()
+                messagebox.showinfo("نجاح", "تم تعديل الدفع بنجاح")
+            else:
+                messagebox.showinfo("تنبيه", "لم يتم إجراء أي تعديل")
+                dialog.destroy()
+
+        tk.Button(dialog, text="تأكيد", command=confirm_edit, bg=self.colors.get('orange', '#F39C12'), 
+                 fg='white', font=('Arial', 12, 'bold'), width=15).pack(pady=10)
+        dialog.bind('<Return>', lambda e: confirm_edit())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+    def open_add_payment_dialog(self):
+        """فتح نافذة إضافة دفع - تصميم محدث"""
+        dialog = tk.Toplevel(self.window)
+        dialog.title(f"إضافة دفع - {self.seller_name}")
+        dialog.geometry("900x500")
+        bg_color = '#ECF0F1'
+        dialog.configure(bg=bg_color)
+        
+        # توسيط
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 450
+        y = (dialog.winfo_screenheight() // 2) - 250
+        dialog.geometry(f"900x500+{x}+{y}")
+
+        # === Header Section ===
+        header_frame = tk.Frame(dialog, bg='#2C3E50', height=80)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="إضافة دفعة أو خصم",
+            font=('Playpen Sans Arabic', 22, 'bold'),
+            bg='#2C3E50',
+            fg='white'
+        ).pack(pady=25)
+
+        # === Main Content ===
+        content_frame = tk.Frame(dialog, bg=bg_color)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
+        
+        # معلومات البائع
+        info_card = tk.Frame(content_frame, bg='white', relief=tk.RAISED, bd=2)
+        info_card.pack(fill=tk.X, pady=(0, 20))
+        
+        info_inner = tk.Frame(info_card, bg='white')
+        info_inner.pack(padx=20, pady=15)
+        
+        tk.Label(
+            info_inner,
+            text=f"البائع: {self.seller_name}",
+            font=('Playpen Sans Arabic', 16, 'bold'),
+            bg='white',
+            fg='#2C3E50'
+        ).pack(side=tk.RIGHT, padx=20)
+        
+        # حساب المتبقي الحالي
+        from datetime import datetime
+        transactions = self.db.get_seller_transactions(self.seller_id)
+        current_remaining = self.old_balance
+        for trans in transactions:
+            if trans[2] == "مدفوع" or trans[2] == "سماح":
+                current_remaining -= trans[1]
+            else:
+                current_remaining += trans[1]
+        
+        tk.Label(
+            info_inner,
+            text=f"المتبقي الحالي: {current_remaining:,.2f} ج.م",
+            font=('Arial', 14, 'bold'),
+            bg='white',
+            fg='#E74C3C' if current_remaining > 0 else '#27AE60'
+        ).pack(side=tk.LEFT, padx=20)
+
+        # === Input Fields Card ===
+        input_card = tk.Frame(content_frame, bg='white', relief=tk.RAISED, bd=2)
+        input_card.pack(fill=tk.BOTH, expand=True)
+        
+        input_inner = tk.Frame(input_card, bg='white')
+        input_inner.pack(fill=tk.BOTH, expand=True, padx=30, pady=25)
+        
+        # Grid for inputs
+        fields_container = tk.Frame(input_inner, bg='white')
+        fields_container.pack(expand=True)
+        
+        def create_input_field(parent, label_text, row, default_value=""):
+            # Label
+            tk.Label(
+                parent,
+                text=label_text,
+                font=('Playpen Sans Arabic', 14, 'bold'),
+                bg='white',
+                fg='#34495E'
+            ).grid(row=row, column=1, sticky='e', padx=15, pady=15)
+            
+            # Entry Frame
+            entry_frame = tk.Frame(parent, bg='#F8F9F9', relief=tk.SOLID, bd=1)
+            entry_frame.grid(row=row, column=0, sticky='ew', padx=15, pady=15)
+            
+            entry = tk.Entry(
+                entry_frame,
+                font=('Arial', 16),
+                justify='center',
+                bg='#F8F9F9',
+                relief=tk.FLAT,
+                fg='#2C3E50'
+            )
+            entry.pack(fill=tk.BOTH, ipady=12, padx=5)
+            
+            if default_value:
+                entry.insert(0, default_value)
+            
+            return entry
+        
+        # Configure grid columns
+        fields_container.grid_columnconfigure(0, weight=1, minsize=400)
+        
+        # Create fields
+        entry_payment = create_input_field(fields_container, "💰 المبلغ المدفوع:", 0, "0")
+        entry_discount = create_input_field(fields_container, "🎁 الخصم (سماح):", 1, "0")
+        entry_note = create_input_field(fields_container, "📝 ملاحظات:", 2, "")
+        
+        # Focus and select
+        entry_payment.focus()
+        entry_payment.select_range(0, tk.END)
+
+        def confirm_payment():
+            payment_str = entry_payment.get().strip()
+            discount_str = entry_discount.get().strip()
+            note = entry_note.get().strip()
+            
+            today = datetime.now().strftime("%Y-%m-%d")
+            added = False
+            
+            # إضافة الدفع
+            if payment_str and payment_str != "0":
+                try:
+                    amount = float(payment_str)
+                    if amount > 0:
+                        item_name = f"دفعة نقدية {('(' + note + ')') if note else ''}"
+                        self.db.add_seller_transaction(
+                            self.seller_id, amount, "مدفوع", 0, 0, 0, item_name, today, "", "", note
+                        )
+                        added = True
+                except ValueError:
+                    messagebox.showerror("خطأ", "الرجاء إدخال مبلغ دفع صحيح", parent=dialog)
+                    return
+
+            # إضافة السماح
+            if discount_str and discount_str != "0":
+                try:
+                    amount = float(discount_str)
+                    if amount > 0:
+                        item_name = "سماح"
+                        self.db.add_seller_transaction(
+                            self.seller_id, amount, "سماح", 0, 0, 0, item_name, today, "", "", note
+                        )
+                        added = True
+                except ValueError:
+                    messagebox.showerror("خطأ", "الرجاء إدخال مبلغ سماح صحيح", parent=dialog)
+                    return
+
+            if added:
+                dialog.destroy()
+                # إعادة تحميل البيانات
+                for row_entries in self.rows:
+                    for entry in row_entries:
+                        entry.destroy()
+                self.rows = []
+                
+                for widget in self.scrollable_frame.winfo_children():
+                    if int(widget.grid_info()['row']) > 0:
                         widget.destroy()
                 
                 self.load_data()
                 messagebox.showinfo("نجاح", "تم إضافة الدفع بنجاح")
             else:
-                dialog.destroy()
+                messagebox.showwarning("تنبيه", "لم يتم إدخال أي قيمة", parent=dialog)
 
-        tk.Button(dialog, text="تأكيد", command=confirm_payment, bg=self.colors.get('orange', '#F39C12'), fg='white', font=('Arial', 12, 'bold'), width=15).pack(pady=10)
+        # === Buttons Section ===
+        buttons_frame = tk.Frame(dialog, bg=bg_color)
+        buttons_frame.pack(fill=tk.X, padx=30, pady=(0, 20))
+        
+        btn_style = {
+            'font': ('Playpen Sans Arabic', 13, 'bold'),
+            'relief': tk.RAISED,
+            'bd': 0,
+            'cursor': 'hand2',
+            'width': 18,
+            'height': 2
+        }
+        
+        tk.Button(
+            buttons_frame,
+            text="✓ تأكيد وحفظ",
+            command=confirm_payment,
+            bg='#27AE60',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        tk.Button(
+            buttons_frame,
+            text="✕ إلغاء",
+            command=dialog.destroy,
+            bg='#95A5A6',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.LEFT, padx=5)
+        
         dialog.bind('<Return>', lambda e: confirm_payment())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
 
     def print_invoice(self): 
-        """طباعة الفاتورة"""
+        """طباعة كشف حساب لفترة محددة"""
         from print_utils import PrintPreviewWindow
         from datetime import datetime
         
-        # جمع بيانات الفاتورة
-        transactions = []
+        # نافذة اختيار الفترة
+        date_window = tk.Toplevel(self.window)
+        date_window.title("طباعة كشف حساب")
+        date_window.geometry("400x250")
+        bg_color = self.colors.get('pink', '#F5CBA7')
+        date_window.configure(bg=bg_color)
         
-        # تجاهل الصف الأخير لأنه عادة ما يكون صف إدخال جديد فارغ
-        rows_to_process = self.rows[:-1] if len(self.rows) > 0 else []
+        # توسيط
+        date_window.update_idletasks()
+        x = (date_window.winfo_screenwidth() // 2) - 200
+        y = (date_window.winfo_screenheight() // 2) - 125
+        date_window.geometry(f"400x250+{x}+{y}")
         
-        for row_entries in rows_to_process:
+        tk.Label(date_window, text="اختر الفترة", font=('Playpen Sans Arabic', 16, 'bold'), 
+                 bg=bg_color, fg='#2C3E50').pack(pady=15)
+        
+        frame = tk.Frame(date_window, bg=bg_color)
+        frame.pack(pady=10)
+        
+        # تاريخ البداية
+        tk.Label(frame, text="من تاريخ:", font=('Arial', 12, 'bold'), bg=bg_color).grid(row=0, column=1, padx=5, pady=5)
+        start_entry = tk.Entry(frame, font=('Arial', 12), justify='center')
+        start_entry.grid(row=0, column=0, padx=5, pady=5)
+        # Default to first of current month
+        start_entry.insert(0, datetime.now().strftime("%Y-%m-01"))
+        
+        # تاريخ النهاية
+        tk.Label(frame, text="إلى تاريخ:", font=('Arial', 12, 'bold'), bg=bg_color).grid(row=1, column=1, padx=5, pady=5)
+        end_entry = tk.Entry(frame, font=('Arial', 12), justify='center')
+        end_entry.grid(row=1, column=0, padx=5, pady=5)
+        end_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        
+        def generate_report():
+            start_date_str = start_entry.get()
+            end_date_str = end_entry.get()
+            
             try:
-                # الفهارس بناءً على self.headers:
-                # 0: العدة, 1: اليوم, 2: التاريخ, 3: الصنف, 4: السعر, 5: الوزن, 6: العدد, 7: الحالة, 8: المبلغ
+                # التحقق من صحة التنسيق
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
                 
-                status = row_entries[7].get().strip()
-                item_name = row_entries[3].get().strip()
+                # جلب جميع المعاملات من قاعدة البيانات
+                all_transactions = self.db.get_seller_transactions(self.seller_id)
+                # transactions: id, amount, status, count, weight, price, item_name, date, day_name, equipment, note
                 
-                # تخطي الصفوف الفارغة تماماً
-                if not item_name and not status:
-                    continue
-                    
-                # تخطي الصفوف التي لا تحتوي على صنف وليست دفعة مالية
-                if not item_name and status != "مدفوع":
-                    continue
-                    
-                weight = float(row_entries[5].get() or 0)
-                count = float(row_entries[6].get() or 0)
-                price = float(row_entries[4].get() or 0)
-                amount = float(row_entries[8].get() or 0)
+                filtered_transactions = []
                 
-                # إذا كان المبلغ صفر، تأكد من حسابه
-                if amount == 0:
-                    if weight > 0: amount = weight * price
-                    elif count > 0: amount = count * price
+                # تصفية المعاملات
+                for trans in all_transactions:
+                    trans_date_str = trans[7]
+                    try:
+                        trans_date = datetime.strptime(trans_date_str, "%Y-%m-%d")
+                        if start_date <= trans_date <= end_date:
+                            # تحويل البيانات للشكل المطلوب للطباعة
+                            # (item_name, weight, count, price, amount, status)
+                            item_name = trans[6]
+                            weight = trans[4]
+                            count = trans[3]
+                            price = trans[5]
+                            amount = trans[1]
+                            status = trans[2]
+                            
+                            filtered_transactions.append((item_name, weight, count, price, amount, status))
+                            
+                    except ValueError:
+                        continue
                 
-                transactions.append((item_name, weight, count, price, amount, status))
-            except (ValueError, AttributeError, IndexError):
-                continue
-        
-        # حساب الإجماليات
-        total_goods = 0.0
-        total_paid = 0.0
-        
-        for trans in transactions:
-            amount = trans[4]
-            status = trans[5]
-            if status == "مدفوع":
-                total_paid += amount
-            else:
-                total_goods += amount
-        
-        final_balance = self.old_balance + total_goods - total_paid
-        
-        # بيانات الفاتورة
-        invoice_data = {
-            'seller_name': self.seller_name,
-            'invoice_date': datetime.now().strftime("%Y-%m-%d %H:%M"),
-            'old_balance': self.old_balance,
-            'transactions': transactions,
-            'total_goods': total_goods,
-            'total_paid': total_paid,
-            'final_balance': final_balance
-        }
-        
-        # فتح نافذة المعاينة
-        PrintPreviewWindow(self.window, invoice_data)
+                # حساب الإجماليات للفترة
+                total_goods = sum(t[4] for t in filtered_transactions if t[5] != "مدفوع" and t[5] != "سماح")
+                total_paid = sum(t[4] for t in filtered_transactions if t[5] == "مدفوع")
+                total_discount = sum(t[4] for t in filtered_transactions if t[5] == "سماح")
+                
+                # حساب الرصيد السابق (قبل الفترة المحددة)
+                balance_before_period = self.old_balance
+                
+                for trans in all_transactions:
+                    trans_date_str = trans[7]
+                    try:
+                        trans_date = datetime.strptime(trans_date_str, "%Y-%m-%d")
+                        if trans_date < start_date:
+                            t_amount = trans[1]
+                            t_status = trans[2]
+                            if t_status == "مدفوع" or t_status == "سماح":
+                                balance_before_period -= t_amount
+                            else:
+                                balance_before_period += t_amount
+                    except ValueError:
+                        pass
+                
+                # المتبقي النهائي = الرصيد السابق + بضاعة الفترة - مدفوعات الفترة - سماح الفترة
+                final_balance = balance_before_period + total_goods - total_paid - total_discount
+                
+                # بيانات التقرير
+                report_data = {
+                    'seller_name': self.seller_name,
+                    'invoice_date': f"من {start_date_str} إلى {end_date_str}",
+                    'old_balance': balance_before_period,
+                    'transactions': filtered_transactions,
+                    'total_goods': total_goods,
+                    'total_paid': total_paid,
+                    'final_balance': final_balance
+                }
+                
+                date_window.destroy()
+                PrintPreviewWindow(self.window, report_data)
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "تنسيق التاريخ غير صحيح (YYYY-MM-DD)", parent=date_window)
+
+        tk.Button(date_window, text="طباعة الكشف", command=generate_report, 
+                  bg='#2C3E50', fg='white', font=('Arial', 12, 'bold'), width=15).pack(pady=20)
 
 
     def load_data(self):
@@ -848,6 +1252,7 @@ class CurrentAccountPage:
         
         grand_total = 0
         total_paid_sum = 0
+        total_discount_sum = 0  # إجمالي السماح
         
         for date, group in groupby(transactions, key=lambda x: x[7]):
             group_list = list(group)
@@ -862,6 +1267,10 @@ class CurrentAccountPage:
                     # صف مدفوع
                     self.add_row(current_row_idx, data=trans, row_type='paid')
                     total_paid_sum += amount
+                elif status == "سماح":
+                    # صف سماح (يُخصم من المتبقي)
+                    self.add_row(current_row_idx, data=trans, row_type='discount')
+                    total_discount_sum += amount
                 else:
                     # صف بضاعة
                     self.add_row(current_row_idx, data=trans, row_type='normal')
@@ -887,7 +1296,13 @@ class CurrentAccountPage:
         self.add_row(current_row_idx, data=total_paid_sum, row_type='total_paid')
         current_row_idx += 1
         
-        remaining = self.old_balance + grand_total - total_paid_sum
+        # إضافة إجمالي السماح
+        if total_discount_sum > 0:
+            self.add_row(current_row_idx, data=total_discount_sum, row_type='total_discount')
+            current_row_idx += 1
+        
+        # المتبقي = الرصيد السابق + البضاعة - المدفوع - السماح
+        remaining = self.old_balance + grand_total - total_paid_sum - total_discount_sum
         self.add_row(current_row_idx, data=remaining, row_type='remaining')
         
         # تحديث خانة المتبقي في الفوتر
@@ -896,8 +1311,8 @@ class CurrentAccountPage:
 
     def add_row(self, row_idx, data=None, row_type='normal'):
         entries = []
-        # Columns: 0:Equipment, 1:Day, 2:Date, 3:Item, 4:Price, 5:Weight, 6:Count, 7:Status, 8:Amount
-        vals = ["", "", "", "", "", "", "", "", ""]
+        # Columns: 0:Equipment, 1:Date, 2:Item, 3:Price, 4:Weight, 5:Count, 6:Status, 7:Amount
+        vals = ["", "", "", "", "", "", "", ""]
         
         bg_color = '#ECF0F1'
         fg_color = 'black'
@@ -905,48 +1320,61 @@ class CurrentAccountPage:
         
         if row_type == 'normal' and data:
             # data: id, amount, status, count, weight, price, item_name, date, day_name, equipment, note
+            # New mapping: Equipment, Date, Item, Price, Weight, Count, Status, Amount
             vals = [
-                data[9], data[8], data[7], data[6], 
+                data[9], data[7], data[6], 
                 data[5], data[4], data[3], data[2], data[1]
             ]
         elif row_type == 'paid' and data:
             # data: id, amount, status, ...
-            vals = ["", "", data[7], "دفعة نقدية", "", "", "", "مدفوع", data[1]]
-            bg_color = '#E74C3C' # Red for paid row? Or just the label?
-            # Image shows: "مدفوع" label is Red, Amount is normal.
-            # Let's style the whole row slightly red or just the status column.
+            vals = ["", data[7], "دفعة نقدية", "", "", "", "مدفوع", data[1]]
+            bg_color = '#E74C3C' # Red
+            fg_color = 'white'
+            
+        elif row_type == 'discount' and data:
+            # data: id, amount, status, ...
+            vals = ["", data[7], "سماح", "", "", "", "سماح", data[1]]
+            bg_color = '#2ECC71' # Green
+            fg_color = 'white'
             
         elif row_type == 'meal_total':
-            vals = ["", "", "", "", "", "", "", "اجمالي وجبه", data]
+            vals = ["", "", "", "", "", "", "اجمالي وجبه", data]
             bg_color = '#F1C40F' # Yellow
             font_style = ('Arial', 12, 'bold')
             
         elif row_type == 'grand_total':
-            vals = ["", "", "", "", "", "", "", "اجمالي الكلي", data]
+            vals = ["", "", "", "", "", "", "اجمالي الكلي", data]
             bg_color = '#BDC3C7' # Grey
             font_style = ('Arial', 12, 'bold')
             
         elif row_type == 'total_paid':
-            vals = ["", "", "", "", "", "", "", "مدفوع", data]
+            vals = ["", "", "", "", "", "", "مدفوع", data]
             bg_color = '#E74C3C' # Red
             fg_color = 'white'
             font_style = ('Arial', 12, 'bold')
             
+        elif row_type == 'total_discount':
+            vals = ["", "", "", "", "", "", "اجمالي سماح", data]
+            bg_color = '#2ECC71' # Green
+            fg_color = 'white'
+            font_style = ('Arial', 12, 'bold')
+            
         elif row_type == 'remaining':
-            vals = ["", "", "", "", "", "", "", "المتبقي", data]
+            vals = ["", "", "", "", "", "", "المتبقي", data]
             bg_color = '#2980B9' # Blue
             fg_color = 'white'
             font_style = ('Arial', 12, 'bold')
 
-        for col in range(9):
+        for col in range(8):
             cell_bg = bg_color
             cell_fg = fg_color
             
-            # Special styling for Status column (index 7) based on image
-            if col == 7:
-                if vals[7] == "مدفوع": cell_bg = '#E74C3C'; cell_fg = 'white'
-                elif vals[7] == "المتبقي": cell_bg = '#2980B9'; cell_fg = 'white'
-                elif vals[7] == "اجمالي وجبه": cell_bg = '#F1C40F'; cell_fg = 'black'
+            # Special styling for Status column (index 6) based on image
+            if col == 6:
+                if vals[6] == "مدفوع": cell_bg = '#E74C3C'; cell_fg = 'white'
+                elif vals[6] == "المتبقي": cell_bg = '#2980B9'; cell_fg = 'white'
+                elif vals[6] == "اجمالي وجبه": cell_bg = '#F1C40F'; cell_fg = 'black'
+                elif vals[6] == "سماح" or vals[6] == "اجمالي سماح": cell_bg = '#2ECC71'; cell_fg = 'white'
             
             widget = tk.Entry(self.scrollable_frame, font=font_style, relief=tk.FLAT, justify='center', bg=cell_bg, fg=cell_fg)
             widget.insert(0, str(vals[col]) if vals[col] is not None else "")
@@ -970,14 +1398,14 @@ class CurrentAccountPage:
             # البحث عن الصف الذي يحتوي على هذا الـ widget
             target_row = None
             for row in self.rows:
-                if row[4] == widget: # العمود 4 هو الصنف
+                if row[2] == widget: # العمود 2 هو الصنف (بعد حذف اليوم)
                     target_row = row
                     break
             
             if target_row:
-                # تحديث السعر (العمود 5)
-                target_row[5].delete(0, tk.END)
-                target_row[5].insert(0, str(price))
+                # تحديث السعر (العمود 3)
+                target_row[3].delete(0, tk.END)
+                target_row[3].insert(0, str(price))
                 # إعادة الحساب
                 self.auto_calc_row_by_entries(target_row)
 
@@ -1001,9 +1429,9 @@ class CurrentAccountPage:
     def auto_calc_row_by_entries(self, row_entries):
         """حساب المبلغ للصف المحدد"""
         try:
-            price = float(row_entries[5].get() or 0)
-            weight = float(row_entries[6].get() or 0)
-            count = float(row_entries[7].get() or 0)
+            price = float(row_entries[3].get() or 0)  # السعر (العمود 3)
+            weight = float(row_entries[4].get() or 0)  # الوزن (العمود 4)
+            count = float(row_entries[5].get() or 0)  # العدد (العمود 5)
             
             amount = 0.0
             if weight > 0:
@@ -1011,9 +1439,9 @@ class CurrentAccountPage:
             elif count > 0:
                 amount = price * count
                 
-            # تحديث المبلغ (العمود 9)
-            row_entries[9].delete(0, tk.END)
-            row_entries[9].insert(0, str(amount))
+            # تحديث المبلغ (العمود 7)
+            row_entries[7].delete(0, tk.END)
+            row_entries[7].insert(0, str(amount))
             
         except ValueError:
             pass # تجاهل القيم غير الرقمية أثناء الكتابة
@@ -1025,12 +1453,12 @@ class CurrentAccountPage:
         
         for row_entries in self.rows:
             try:
-                # المبلغ
-                amount_str = row_entries[9].get().strip()
+                # المبلغ (العمود 7)
+                amount_str = row_entries[7].get().strip()
                 amount = float(amount_str) if amount_str else 0.0
                 
-                # الحالة
-                status = row_entries[8].get().strip()
+                # الحالة (العمود 6)
+                status = row_entries[6].get().strip()
                 
                 if status == "مدفوع":
                     total_paid += amount

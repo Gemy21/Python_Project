@@ -1,0 +1,724 @@
+{
+  "export_date": "2025-12-02T09:34:00.145373",
+  "database_name": "company_accounts.db",
+  "tables": {
+    "sellers_accounts": {
+      "columns": [
+        "id",
+        "seller_name",
+        "remaining_amount",
+        "total_credit",
+        "created_at",
+        "updated_at",
+        "phone"
+      ],
+      "data": [
+        {
+          "id": 9,
+          "seller_name": "عزمي",
+          "remaining_amount": 0.0,
+          "total_credit": 0.0,
+          "created_at": "2025-12-01 12:22:59",
+          "updated_at": "2025-12-01 12:22:59",
+          "phone": ""
+        },
+        {
+          "id": 10,
+          "seller_name": "عزمي",
+          "remaining_amount": 0.0,
+          "total_credit": 0.0,
+          "created_at": "2025-12-01 14:34:18",
+          "updated_at": "2025-12-01 14:34:18",
+          "phone": ""
+        },
+        {
+          "id": 11,
+          "seller_name": "محمود",
+          "remaining_amount": 0.0,
+          "total_credit": 0.0,
+          "created_at": "2025-12-01 19:02:58",
+          "updated_at": "2025-12-01 19:02:58",
+          "phone": ""
+        }
+      ],
+      "row_count": 3
+    },
+    "seller_transactions": {
+      "columns": [
+        "id",
+        "seller_id",
+        "amount",
+        "status",
+        "count",
+        "weight",
+        "price",
+        "item_name",
+        "date",
+        "day_name",
+        "equipment",
+        "note",
+        "created_at"
+      ],
+      "data": [
+        {
+          "id": 7,
+          "seller_id": 9,
+          "amount": 600.0,
+          "status": "متبقي",
+          "count": 1.0,
+          "weight": 25.0,
+          "price": 24.0,
+          "item_name": "رمان",
+          "date": "2025-12-01",
+          "day_name": "",
+          "equipment": "",
+          "note": "ترحيل زراعة (داخل) - ياسين - 2025-12-01",
+          "created_at": "2025-12-01 12:24:02"
+        },
+        {
+          "id": 8,
+          "seller_id": 9,
+          "amount": 580.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "دفعة نقدية ",
+          "date": "2025-12-01",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-01 12:24:42"
+        },
+        {
+          "id": 9,
+          "seller_id": 9,
+          "amount": 20.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "سماح ",
+          "date": "2025-12-01",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-01 12:24:42"
+        },
+        {
+          "id": 10,
+          "seller_id": 11,
+          "amount": 750.0,
+          "status": "متبقي",
+          "count": 0.0,
+          "weight": 30.0,
+          "price": 25.0,
+          "item_name": "رمان",
+          "date": "2025-12-01",
+          "day_name": "",
+          "equipment": "",
+          "note": "ترحيل زراعة (خارج) - ياسين - 2025-12-01",
+          "created_at": "2025-12-01 19:14:55"
+        },
+        {
+          "id": 11,
+          "seller_id": 11,
+          "amount": 500.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "تحصيل نقدية",
+          "date": "2025-12-01",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-01 19:15:28"
+        },
+        {
+          "id": 12,
+          "seller_id": 9,
+          "amount": 4.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "سماح",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-02 04:18:25"
+        },
+        {
+          "id": 13,
+          "seller_id": 9,
+          "amount": 2100.0,
+          "status": "متبقي",
+          "count": 30.0,
+          "weight": 0.0,
+          "price": 70.0,
+          "item_name": "عده بوكس",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "عده بوكس",
+          "note": "تحصيل 30 عده بوكس",
+          "created_at": "2025-12-02 04:21:58"
+        },
+        {
+          "id": 14,
+          "seller_id": 9,
+          "amount": 70.0,
+          "status": "متبقي",
+          "count": 1.0,
+          "weight": 0.0,
+          "price": 70.0,
+          "item_name": "عده بوكس",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "عده بوكس",
+          "note": "تحصيل 1 عده بوكس",
+          "created_at": "2025-12-02 04:23:29"
+        },
+        {
+          "id": 15,
+          "seller_id": 9,
+          "amount": 1.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "سماح",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-02 04:32:39"
+        },
+        {
+          "id": 16,
+          "seller_id": 9,
+          "amount": 20.0,
+          "status": "متبقي",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "تعديل دفع - خصم ",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-02 04:33:13"
+        },
+        {
+          "id": 17,
+          "seller_id": 11,
+          "amount": 200.0,
+          "status": "مدفوع",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "دفعة نقدية ",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-02 04:38:32"
+        },
+        {
+          "id": 18,
+          "seller_id": 11,
+          "amount": 10.0,
+          "status": "سماح",
+          "count": 0.0,
+          "weight": 0.0,
+          "price": 0.0,
+          "item_name": "سماح",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "",
+          "created_at": "2025-12-02 04:38:32"
+        },
+        {
+          "id": 19,
+          "seller_id": 11,
+          "amount": 510.0,
+          "status": "متبقي",
+          "count": 2.0,
+          "weight": 30.0,
+          "price": 17.0,
+          "item_name": "ليمون",
+          "date": "2025-12-02",
+          "day_name": "",
+          "equipment": "",
+          "note": "ترحيل زراعة - ياسين",
+          "created_at": "2025-12-02 04:55:56"
+        }
+      ],
+      "row_count": 13
+    },
+    "clients_accounts": {
+      "columns": [
+        "id",
+        "client_name",
+        "balance",
+        "phone"
+      ],
+      "data": [
+        {
+          "id": 1,
+          "client_name": "ياسين",
+          "balance": 2250.0,
+          "phone": ""
+        },
+        {
+          "id": 2,
+          "client_name": "رمضان البرنس",
+          "balance": 0.0,
+          "phone": ""
+        },
+        {
+          "id": 3,
+          "client_name": "محمد سعيد",
+          "balance": 2000.0,
+          "phone": ""
+        },
+        {
+          "id": 4,
+          "client_name": "محمد حسن",
+          "balance": 0.0,
+          "phone": ""
+        }
+      ],
+      "row_count": 4
+    },
+    "inventory_items": {
+      "columns": [
+        "id",
+        "name",
+        "type",
+        "quantity",
+        "created_at",
+        "price"
+      ],
+      "data": [
+        {
+          "id": 1,
+          "name": "عده بوكس",
+          "type": "بوكس",
+          "quantity": 69,
+          "created_at": "2025-12-01 13:43:21",
+          "price": 70.0
+        },
+        {
+          "id": 2,
+          "name": "عده خشب",
+          "type": "خشب",
+          "quantity": 230,
+          "created_at": "2025-12-01 13:52:42",
+          "price": 60.0
+        }
+      ],
+      "row_count": 2
+    },
+    "meals": {
+      "columns": [
+        "id",
+        "name",
+        "price_per_kg",
+        "equipment_weight",
+        "created_at"
+      ],
+      "data": [
+        {
+          "id": 4,
+          "name": "رمان",
+          "price_per_kg": 24.0,
+          "equipment_weight": 50.0,
+          "created_at": "2025-12-01 12:23:22"
+        },
+        {
+          "id": 6,
+          "name": "عنب ملوكي",
+          "price_per_kg": 30.0,
+          "equipment_weight": 0.0,
+          "created_at": "2025-12-02 02:48:07"
+        },
+        {
+          "id": 7,
+          "name": "ليمون",
+          "price_per_kg": 12.0,
+          "equipment_weight": 0.0,
+          "created_at": "2025-12-02 02:56:25"
+        },
+        {
+          "id": 8,
+          "name": "تفاح",
+          "price_per_kg": 50.0,
+          "equipment_weight": 0.0,
+          "created_at": "2025-12-02 05:10:01"
+        }
+      ],
+      "row_count": 4
+    },
+    "agriculture_transfers": {
+      "columns": [
+        "id",
+        "shipment_name",
+        "seller_name",
+        "item_name",
+        "unit_price",
+        "weight",
+        "equipment",
+        "created_at",
+        "count",
+        "transfer_type"
+      ],
+      "data": [
+        {
+          "id": 4,
+          "shipment_name": "ياسين",
+          "seller_name": "ياسين",
+          "item_name": "رمان",
+          "unit_price": 25.0,
+          "weight": 90.0,
+          "equipment": "",
+          "created_at": "2025-12-01 19:13:27",
+          "count": 0.0,
+          "transfer_type": "in"
+        },
+        {
+          "id": 5,
+          "shipment_name": "ياسين - 2025-12-01",
+          "seller_name": "محمود",
+          "item_name": "رمان",
+          "unit_price": 25.0,
+          "weight": 30.0,
+          "equipment": "",
+          "created_at": "2025-12-01 19:14:55",
+          "count": 0.0,
+          "transfer_type": "out"
+        },
+        {
+          "id": 6,
+          "shipment_name": "ياسين",
+          "seller_name": "ياسين",
+          "item_name": "عنب ملوكي",
+          "unit_price": 30.0,
+          "weight": 30.0,
+          "equipment": "",
+          "created_at": "2025-12-02 02:48:07",
+          "count": 1.0,
+          "transfer_type": "out"
+        },
+        {
+          "id": 7,
+          "shipment_name": "محمد سعيد",
+          "seller_name": "محمد سعيد",
+          "item_name": "ليمون",
+          "unit_price": 12.0,
+          "weight": 40.0,
+          "equipment": "",
+          "created_at": "2025-12-02 03:28:13",
+          "count": 1.0,
+          "transfer_type": "out"
+        },
+        {
+          "id": 8,
+          "shipment_name": "ياسين",
+          "seller_name": "محمود",
+          "item_name": "ليمون",
+          "unit_price": 17.0,
+          "weight": 30.0,
+          "equipment": "",
+          "created_at": "2025-12-02 04:55:56",
+          "count": 2.0,
+          "transfer_type": "out"
+        },
+        {
+          "id": 9,
+          "shipment_name": "محمد سعيد",
+          "seller_name": "محمد سعيد",
+          "item_name": "تفاح",
+          "unit_price": 50.0,
+          "weight": 40.0,
+          "equipment": "",
+          "created_at": "2025-12-02 05:10:01",
+          "count": 1.0,
+          "transfer_type": "in"
+        }
+      ],
+      "row_count": 6
+    },
+    "expenses": {
+      "columns": [
+        "id",
+        "description",
+        "amount",
+        "expense_date",
+        "note",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "client_invoices": {
+      "columns": [
+        "id",
+        "owner_name",
+        "nolon",
+        "commission",
+        "mashal",
+        "rent",
+        "cash",
+        "invoice_date",
+        "created_at",
+        "updated_at",
+        "net_amount",
+        "final_total"
+      ],
+      "data": [
+        {
+          "id": 1,
+          "owner_name": "ياسين",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 00:16:02",
+          "updated_at": "2025-12-02 00:16:02",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 2,
+          "owner_name": "ياسين",
+          "nolon": 100.0,
+          "commission": "8%",
+          "mashal": 10.0,
+          "rent": 50.0,
+          "cash": 30.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 00:16:27",
+          "updated_at": "2025-12-02 00:16:27",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 3,
+          "owner_name": "ياسين",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 00:16:32",
+          "updated_at": "2025-12-02 00:16:32",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 4,
+          "owner_name": "ياسين",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 04:42:17",
+          "updated_at": "2025-12-02 04:42:17",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 5,
+          "owner_name": "محمد سعيد",
+          "nolon": 100.0,
+          "commission": "5%",
+          "mashal": 12.0,
+          "rent": 30.0,
+          "cash": 20.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 05:21:10",
+          "updated_at": "2025-12-02 05:21:10",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 6,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 05:21:12",
+          "updated_at": "2025-12-02 05:21:12",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 7,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 05:29:20",
+          "updated_at": "2025-12-02 05:29:20",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 8,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 05:31:11",
+          "updated_at": "2025-12-02 05:31:11",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 9,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 05:43:30",
+          "updated_at": "2025-12-02 05:43:30",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 10,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 06:06:59",
+          "updated_at": "2025-12-02 06:06:59",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 11,
+          "owner_name": "",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 06:56:42",
+          "updated_at": "2025-12-02 06:56:42",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 12,
+          "owner_name": "",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 06:57:27",
+          "updated_at": "2025-12-02 06:57:27",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 13,
+          "owner_name": "محمد سعيد",
+          "nolon": 0.0,
+          "commission": "10%",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 06:59:24",
+          "updated_at": "2025-12-02 06:59:24",
+          "net_amount": 0.0,
+          "final_total": 0.0
+        },
+        {
+          "id": 14,
+          "owner_name": "محمد سعيد",
+          "nolon": 50.0,
+          "commission": "6.0",
+          "mashal": 0.0,
+          "rent": 0.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 07:25:08",
+          "updated_at": "2025-12-02 07:25:08",
+          "net_amount": 2000.0,
+          "final_total": 1944.0
+        },
+        {
+          "id": 15,
+          "owner_name": "محمد سعيد",
+          "nolon": 50.0,
+          "commission": "120.0",
+          "mashal": 10.0,
+          "rent": 30.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 07:25:46",
+          "updated_at": "2025-12-02 07:25:46",
+          "net_amount": 2000.0,
+          "final_total": 1790.0
+        },
+        {
+          "id": 16,
+          "owner_name": "محمد سعيد",
+          "nolon": 50.0,
+          "commission": "6.0",
+          "mashal": 10.0,
+          "rent": 30.0,
+          "cash": 0.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 07:26:02",
+          "updated_at": "2025-12-02 07:26:02",
+          "net_amount": 2000.0,
+          "final_total": 1904.0
+        },
+        {
+          "id": 17,
+          "owner_name": "محمد سعيد",
+          "nolon": 50.0,
+          "commission": "6.0",
+          "mashal": 10.0,
+          "rent": 30.0,
+          "cash": 1.0,
+          "invoice_date": "2025/12/02",
+          "created_at": "2025-12-02 07:26:15",
+          "updated_at": "2025-12-02 07:26:15",
+          "net_amount": 2000.0,
+          "final_total": 1903.0
+        }
+      ],
+      "row_count": 17
+    }
+  }
+}

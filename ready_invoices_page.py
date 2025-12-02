@@ -160,90 +160,434 @@ class ReadyInvoicesPage:
         )
     
     def add_invoice(self):
-        """Open add invoice dialog"""
+        """Open add invoice dialog - Redesigned"""
         dialog = tk.Toplevel(self.window)
-        dialog.title("اضافة فاتورة")
-        dialog.geometry("1100x250")
+        dialog.title("إضافة فاتورة")
+        dialog.geometry("1100x450")
         
-        # Colors from image
-        dark_blue = '#154360'  # Dark Blue for header
-        light_blue = '#85C1E9' # Light Blue for background
+        # Colors
+        bg_color = '#ECF0F1'
+        header_bg = '#2C3E50'
+        dialog.configure(bg=bg_color)
         
-        dialog.configure(bg=light_blue)
+        # Center
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 550
+        y = (dialog.winfo_screenheight() // 2) - 225
+        dialog.geometry(f"1100x450+{x}+{y}")
         
-        # 1. Title Frame (Dark Blue)
-        title_frame = tk.Frame(dialog, bg=dark_blue, pady=15)
-        title_frame.pack(fill=tk.X)
+        # === Header Section ===
+        header_frame = tk.Frame(dialog, bg=header_bg, height=80)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
         
         tk.Label(
-            title_frame,
-            text="خلفاء الحاج محي غريب بعجر للخضروات والفواكه",
+            header_frame,
+            text="إضافة فاتورة جديدة",
             font=('Playpen Sans Arabic', 22, 'bold'),
-            bg=dark_blue,
+            bg=header_bg,
             fg='white'
-        ).pack()
+        ).pack(pady=20)
         
-        # 2. Content Frame
-        content_frame = tk.Frame(dialog, bg=light_blue)
+        # === Main Content ===
+        content_frame = tk.Frame(dialog, bg=bg_color)
         content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # Fields (Right to Left)
-        fields = [
-            ("اسم صاحب الفاتورة", 30),
-            ("نولون", 12),
-            ("العمولة", 12),
-            ("مشال", 12),
-            ("ايجار", 12),
-            ("نقديه", 12),
-            ("التاريخ", 15)
+        # Input Card
+        input_card = tk.Frame(content_frame, bg='white', relief=tk.RAISED, bd=2)
+        input_card.pack(fill=tk.BOTH, expand=True)
+        
+        # Inner padding
+        inner_frame = tk.Frame(input_card, bg='white')
+        inner_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # --- Top Row: Owner and Date ---
+        top_row = tk.Frame(inner_frame, bg='white')
+        top_row.pack(fill=tk.X, pady=(0, 20))
+        
+        # Owner Name (Right)
+        tk.Label(top_row, text="اسم صاحب الفاتورة:", font=('Arial', 12, 'bold'), bg='white').pack(side=tk.RIGHT, padx=5)
+        owner_entry = tk.Entry(top_row, font=('Arial', 12), justify='center', width=30, bg='#F4F6F7')
+        owner_entry.pack(side=tk.RIGHT, padx=5)
+        if self.transfer_data:
+            owner_entry.insert(0, self.transfer_data[0])
+            
+        # Date (Left)
+        tk.Label(top_row, text="التاريخ:", font=('Arial', 12, 'bold'), bg='white').pack(side=tk.LEFT, padx=5)
+        date_entry = tk.Entry(top_row, font=('Arial', 12), justify='center', width=15, bg='#F4F6F7')
+        date_entry.pack(side=tk.LEFT, padx=5)
+        date_entry.insert(0, datetime.now().strftime("%Y/%m/%d"))
+        
+        # --- Middle Row: Numeric Fields ---
+        mid_frame = tk.Frame(inner_frame, bg='white')
+        mid_frame.pack(fill=tk.X, pady=10)
+        
+        # Configure grid columns to have equal weight
+        for i in range(5):
+            mid_frame.grid_columnconfigure(i, weight=1, uniform='field')
+        
+        # Fields: Nolon, Commission, Mashal, Rent, Cash
+        # Reversed order for display (Right to Left)
+        fields_config = [
+            ("نولون", "0"),
+            ("العمولة", "0"),
+            ("مشال", "0"),
+            ("ايجار عد", "0"),
+            ("نقديه", "0")
         ]
         
-        self.add_invoice_entries = {}
+        invoice_entries = {}
         
-        for field, width in fields:
-            # Column Container
-            col_frame = tk.Frame(content_frame, bg=light_blue)
-            col_frame.pack(side=tk.RIGHT, padx=2, fill=tk.Y)
+        # Create fields using grid for perfect alignment
+        for idx, (label_text, default_val) in enumerate(fields_config):
+            # Calculate column position (right to left)
+            col = 4 - idx
             
-            # Header Label
+            # Container
+            field_container = tk.Frame(mid_frame, bg='white', relief=tk.SOLID, bd=1)
+            field_container.grid(row=0, column=col, padx=5, sticky='ew')
+            
+            # Label
             tk.Label(
-                col_frame,
-                text=field,
+                field_container,
+                text=label_text,
                 font=('Arial', 12, 'bold'),
-                bg=dark_blue,
+                bg='#3498DB',
                 fg='white',
-                width=width,
-                pady=8
+                pady=5
             ).pack(fill=tk.X)
             
             # Entry
             entry = tk.Entry(
-                col_frame,
-                font=('Arial', 12),
+                field_container,
+                font=('Arial', 14),
                 justify='center',
-                relief=tk.FLAT
+                relief=tk.FLAT,
+                bg='white'
             )
-            entry.pack(fill=tk.X, pady=(5, 0), ipady=6)
+            entry.pack(fill=tk.BOTH, ipady=8, padx=2, pady=2)
+            entry.insert(0, default_val)
+            invoice_entries[label_text] = entry
+
+        # Add owner and date to dictionary for easy access
+        invoice_entries["اسم صاحب الفاتورة"] = owner_entry
+        invoice_entries["التاريخ"] = date_entry
+
+        # === Buttons Section ===
+        buttons_frame = tk.Frame(dialog, bg=bg_color)
+        buttons_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        def save_invoice():
+            try:
+                owner_name = invoice_entries["اسم صاحب الفاتورة"].get().strip()
+                nolon_str = invoice_entries["نولون"].get().strip() or "0"
+                commission_str = invoice_entries["العمولة"].get().strip() or "0"
+                mashal_str = invoice_entries["مشال"].get().strip() or "0"
+                rent_str = invoice_entries["ايجار عد"].get().strip() or "0"
+                cash_str = invoice_entries["نقديه"].get().strip() or "0"
+                invoice_date = invoice_entries["التاريخ"].get().strip()
+                
+                if not owner_name:
+                    messagebox.showwarning("تنبيه", "الرجاء إدخال اسم صاحب الفاتورة", parent=dialog)
+                    return
+                
+                # Get net amount from transfer data
+                if not self.transfer_data:
+                    messagebox.showwarning("تنبيه", "لا توجد بيانات ترحيل لحساب الفاتورة", parent=dialog)
+                    return
+                
+                # transfer_data: (owner, count, weight, item, price, net, date, equipment)
+                net_amount = float(self.transfer_data[5])  # الصافي
+                
+                # Parse values
+                nolon = float(nolon_str)
+                mashal = float(mashal_str)
+                rent = float(rent_str)
+                cash = float(cash_str)
+                
+                # Calculate commission as percentage
+                if '%' in commission_str:
+                    commission_percent = float(commission_str.replace('%', '').strip())
+                    commission = (net_amount * commission_percent) / 100
+                else:
+                    commission = float(commission_str)
+                
+                # Calculate final total
+                total_deductions = nolon + commission + mashal + rent + cash
+                final_total = net_amount - total_deductions
+                
+                # Save to database (create simple storage)
+                self.db.save_client_invoice(owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total)
+                
+                # Show success message
+                messagebox.showinfo("نجاح", "تم حفظ الفاتورة بنجاح", parent=dialog)
+                
+                dialog.destroy()
+                
+            except ValueError as e:
+                messagebox.showerror("خطأ", f"الرجاء إدخال قيم رقمية صحيحة\n{str(e)}", parent=dialog)
+
+        btn_style = {
+            'font': ('Playpen Sans Arabic', 14, 'bold'),
+            'relief': tk.RAISED,
+            'bd': 0,
+            'cursor': 'hand2',
+            'width': 15,
+            'height': 1
+        }
+        
+        tk.Button(
+            buttons_frame,
+            text="✓ حفظ الفاتورة",
+            command=save_invoice,
+            bg='#27AE60',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.RIGHT, padx=10)
+        
+        tk.Button(
+            buttons_frame,
+            text="✕ إلغاء",
+            command=dialog.destroy,
+            bg='#95A5A6',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.LEFT, padx=10)
+        
+        dialog.bind('<Return>', lambda e: save_invoice())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+    
+    def print_client_invoice(self, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total):
+        """Print client invoice using PrintPreviewWindow"""
+        from print_utils import PrintPreviewWindow
+        
+        # Prepare invoice data similar to seller invoice format
+        # Create transactions list for display
+        transactions = []
+        
+        # Add transfer data if available
+        if self.transfer_data:
+            # transfer_data: (owner, count, weight, item, price, net, date, equipment)
+            item_name = str(self.transfer_data[3])  # الصنف
+            weight = float(self.transfer_data[2]) if self.transfer_data[2] else 0     # الوزن
+            count = float(self.transfer_data[1]) if self.transfer_data[1] else 0      # العدد
+            price = float(self.transfer_data[4]) if self.transfer_data[4] else 0      # السعر
+            amount = float(self.transfer_data[5]) if self.transfer_data[5] else 0     # الصافي
             
-            self.add_invoice_entries[field] = entry
-            
-            # Default Values
-            if field == "التاريخ":
-                entry.insert(0, datetime.now().strftime("%Y/%m/%d"))
-            elif field == "العمولة":
-                entry.insert(0, "10%")
-            elif field == "اسم صاحب الفاتورة" and self.transfer_data:
-                entry.insert(0, self.transfer_data[0])
-            elif field != "اسم صاحب الفاتورة":
-                entry.insert(0, "0")
+            transactions.append((item_name, weight, count, price, amount, "بضاعة"))
+        
+        # Add deductions as negative transactions
+        if nolon > 0:
+            transactions.append(("نولون", 0, 0, 0, nolon, "خصم"))
+        if commission > 0:
+            transactions.append(("عمولة", 0, 0, 0, commission, "خصم"))
+        if mashal > 0:
+            transactions.append(("مشال", 0, 0, 0, mashal, "خصم"))
+        if rent > 0:
+            transactions.append(("إيجار عد", 0, 0, 0, rent, "خصم"))
+        if cash > 0:
+            transactions.append(("نقدية", 0, 0, 0, cash, "خصم"))
+        
+        # Prepare invoice data
+        invoice_data = {
+            'seller_name': owner_name,
+            'invoice_date': invoice_date,
+            'old_balance': 0,  # No old balance for client invoices
+            'transactions': transactions,
+            'total_goods': net_amount,
+            'total_paid': nolon + commission + mashal + rent + cash,
+            'final_balance': final_total
+        }
+        
+        PrintPreviewWindow(self.window, invoice_data)
     
     def preview_invoice(self):
-        """Preview invoice for printing"""
+        """Preview and print invoice - this is the main print button"""
         if not self.transfer_data:
-            messagebox.showwarning("تنبيه", "لا توجد فاتورة لمعاينتها")
+            messagebox.showwarning("تنبيه", "لا توجد بيانات ترحيل لإنشاء الفاتورة")
             return
         
-        messagebox.showinfo("معاينة فاتورة", "سيتم فتح نافذة المعاينة للطباعة")
+        # Open dialog to enter invoice details before printing
+        dialog = tk.Toplevel(self.window)
+        dialog.title("معاينة وطباعة الفاتورة")
+        dialog.geometry("1100x450")
+        
+        # Colors
+        bg_color = '#ECF0F1'
+        header_bg = '#2C3E50'
+        dialog.configure(bg=bg_color)
+        
+        # Center
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 550
+        y = (dialog.winfo_screenheight() // 2) - 225
+        dialog.geometry(f"1100x450+{x}+{y}")
+        
+        # === Header Section ===
+        header_frame = tk.Frame(dialog, bg=header_bg, height=80)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame,
+            text="معاينة وطباعة الفاتورة",
+            font=('Playpen Sans Arabic', 22, 'bold'),
+            bg=header_bg,
+            fg='white'
+        ).pack(pady=20)
+        
+        # === Main Content ===
+        content_frame = tk.Frame(dialog, bg=bg_color)
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Input Card
+        input_card = tk.Frame(content_frame, bg='white', relief=tk.RAISED, bd=2)
+        input_card.pack(fill=tk.BOTH, expand=True)
+        
+        # Inner padding
+        inner_frame = tk.Frame(input_card, bg='white')
+        inner_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # --- Top Row: Owner and Date ---
+        top_row = tk.Frame(inner_frame, bg='white')
+        top_row.pack(fill=tk.X, pady=(0, 20))
+        
+        # Owner Name (Right)
+        tk.Label(top_row, text="اسم صاحب الفاتورة:", font=('Arial', 12, 'bold'), bg='white').pack(side=tk.RIGHT, padx=5)
+        owner_entry = tk.Entry(top_row, font=('Arial', 12), justify='center', width=30, bg='#F4F6F7')
+        owner_entry.pack(side=tk.RIGHT, padx=5)
+        owner_entry.insert(0, str(self.transfer_data[0]))
+            
+        # Date (Left)
+        tk.Label(top_row, text="التاريخ:", font=('Arial', 12, 'bold'), bg='white').pack(side=tk.LEFT, padx=5)
+        date_entry = tk.Entry(top_row, font=('Arial', 12), justify='center', width=15, bg='#F4F6F7')
+        date_entry.pack(side=tk.LEFT, padx=5)
+        date_entry.insert(0, datetime.now().strftime("%Y/%m/%d"))
+        
+        # --- Middle Row: Numeric Fields ---
+        mid_frame = tk.Frame(inner_frame, bg='white')
+        mid_frame.pack(fill=tk.X, pady=10)
+        
+        # Configure grid columns to have equal weight
+        for i in range(5):
+            mid_frame.grid_columnconfigure(i, weight=1, uniform='field')
+        
+        # Fields
+        fields_config = [
+            ("نولون", "0"),
+            ("العمولة", "0"),
+            ("مشال", "0"),
+            ("ايجار عد", "0"),
+            ("نقديه", "0")
+        ]
+        
+        invoice_entries = {}
+        
+        # Create fields using grid for perfect alignment
+        for idx, (label_text, default_val) in enumerate(fields_config):
+            col = 4 - idx
+            
+            field_container = tk.Frame(mid_frame, bg='white', relief=tk.SOLID, bd=1)
+            field_container.grid(row=0, column=col, padx=5, sticky='ew')
+            
+            tk.Label(
+                field_container,
+                text=label_text,
+                font=('Arial', 12, 'bold'),
+                bg='#3498DB',
+                fg='white',
+                pady=5
+            ).pack(fill=tk.X)
+            
+            entry = tk.Entry(
+                field_container,
+                font=('Arial', 14),
+                justify='center',
+                relief=tk.FLAT,
+                bg='white'
+            )
+            entry.pack(fill=tk.BOTH, ipady=8, padx=2, pady=2)
+            entry.insert(0, default_val)
+            invoice_entries[label_text] = entry
+
+        invoice_entries["اسم صاحب الفاتورة"] = owner_entry
+        invoice_entries["التاريخ"] = date_entry
+
+        def print_now():
+            try:
+                owner_name = invoice_entries["اسم صاحب الفاتورة"].get().strip()
+                nolon_str = invoice_entries["نولون"].get().strip() or "0"
+                commission_str = invoice_entries["العمولة"].get().strip() or "0"
+                mashal_str = invoice_entries["مشال"].get().strip() or "0"
+                rent_str = invoice_entries["ايجار عد"].get().strip() or "0"
+                cash_str = invoice_entries["نقديه"].get().strip() or "0"
+                invoice_date = invoice_entries["التاريخ"].get().strip()
+                
+                if not owner_name:
+                    messagebox.showwarning("تنبيه", "الرجاء إدخال اسم صاحب الفاتورة", parent=dialog)
+                    return
+                
+                # Get net amount from transfer data
+                net_amount = float(self.transfer_data[5])  # الصافي
+                
+                # Parse values
+                nolon = float(nolon_str)
+                mashal = float(mashal_str)
+                rent = float(rent_str)
+                cash = float(cash_str)
+                
+                # Calculate commission as percentage
+                if '%' in commission_str:
+                    commission_percent = float(commission_str.replace('%', '').strip())
+                    commission = (net_amount * commission_percent) / 100
+                else:
+                    commission = float(commission_str)
+                
+                # Calculate final total
+                total_deductions = nolon + commission + mashal + rent + cash
+                final_total = net_amount - total_deductions
+                
+                dialog.destroy()
+                
+                # Print invoice
+                self.print_client_invoice(owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total)
+                
+            except ValueError as e:
+                messagebox.showerror("خطأ", f"الرجاء إدخال قيم رقمية صحيحة\n{str(e)}", parent=dialog)
+
+        # === Buttons Section ===
+        buttons_frame = tk.Frame(dialog, bg=bg_color)
+        buttons_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        btn_style = {
+            'font': ('Playpen Sans Arabic', 14, 'bold'),
+            'relief': tk.RAISED,
+            'bd': 0,
+            'cursor': 'hand2',
+            'width': 15,
+            'height': 1
+        }
+        
+        tk.Button(
+            buttons_frame,
+            text="📄 طباعة الفاتورة",
+            command=print_now,
+            bg='#3498DB',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.RIGHT, padx=10)
+        
+        tk.Button(
+            buttons_frame,
+            text="✕ إلغاء",
+            command=dialog.destroy,
+            bg='#95A5A6',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.LEFT, padx=10)
+        
+        dialog.bind('<Return>', lambda e: print_now())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
     
     def edit_invoice(self):
         """Open edit invoice dialog"""
@@ -398,3 +742,85 @@ class ReadyInvoicesPage:
             width=10,
             pady=5
         ).pack(side=tk.LEFT)
+
+        # === Buttons Section ===
+        buttons_frame = tk.Frame(dialog, bg=light_blue)
+        buttons_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        def save_edited_invoice():
+            try:
+                owner_name = self.edit_entries["اسم صاحب الفاتورة"].get().strip()
+                nolon_str = self.edit_entries["نولون"].get().strip() or "0"
+                commission_str = self.edit_entries["العمولة"].get().strip() or "0"
+                mashal_str = self.edit_entries["مشال"].get().strip() or "0"
+                rent_str = self.edit_entries["ايجار عد"].get().strip() or "0"
+                cash_str = self.edit_entries["نقديه"].get().strip() or "0"
+                invoice_date = self.edit_entries["التاريخ"].get().strip()
+                
+                if not owner_name:
+                    messagebox.showwarning("تنبيه", "الرجاء إدخال اسم صاحب الفاتورة", parent=dialog)
+                    return
+                
+                # Get net amount from transfer data
+                if not self.transfer_data:
+                    messagebox.showwarning("تنبيه", "لا توجد بيانات ترحيل لحساب الفاتورة", parent=dialog)
+                    return
+                
+                # transfer_data: (owner, count, weight, item, price, net, date, equipment)
+                net_amount = float(self.transfer_data[5])  # الصافي
+                
+                # Parse values
+                nolon = float(nolon_str)
+                mashal = float(mashal_str)
+                rent = float(rent_str)
+                cash = float(cash_str)
+                
+                # Calculate commission as percentage relative to Net
+                if '%' in commission_str:
+                    commission_percent = float(commission_str.replace('%', '').strip())
+                    commission = (net_amount * commission_percent) / 100
+                else:
+                    commission = float(commission_str)
+                
+                # Calculate final total
+                # Sum (Noloon + Commission + Mashal + Rent + Cash) and subtract from Net
+                total_deductions = nolon + commission + mashal + rent + cash
+                final_total = net_amount - total_deductions
+                
+                # Save to database
+                self.db.save_client_invoice(owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total)
+                
+                # Show success message
+                messagebox.showinfo("نجاح", "تم حفظ الفاتورة بنجاح", parent=dialog)
+                
+                dialog.destroy()
+                
+            except ValueError as e:
+                messagebox.showerror("خطأ", f"الرجاء إدخال قيم رقمية صحيحة\n{str(e)}", parent=dialog)
+
+        btn_style = {
+            'font': ('Playpen Sans Arabic', 14, 'bold'),
+            'relief': tk.RAISED,
+            'bd': 0,
+            'cursor': 'hand2',
+            'width': 15,
+            'height': 1
+        }
+        
+        tk.Button(
+            buttons_frame,
+            text="✓ حفظ الفاتورة",
+            command=save_edited_invoice,
+            bg='#27AE60',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.RIGHT, padx=10)
+        
+        tk.Button(
+            buttons_frame,
+            text="✕ إلغاء",
+            command=dialog.destroy,
+            bg='#95A5A6',
+            fg='white',
+            **btn_style
+        ).pack(side=tk.LEFT, padx=10)

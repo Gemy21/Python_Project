@@ -84,8 +84,7 @@ class InventoryPage:
         # Buy (Increase)
         tk.Button(action_card, text="شراء عدة (+)", command=lambda: self.update_stock('buy'), bg='#27AE60', fg='white', font=self.fonts['button'], relief=tk.RAISED, bd=2, height=1).pack(fill=tk.X, pady=5)
         
-        # Sell (Decrease)
-        tk.Button(action_card, text="بيع عدة (-)", command=lambda: self.update_stock('sell'), bg='#C0392B', fg='white', font=self.fonts['button'], relief=tk.RAISED, bd=2, height=1).pack(fill=tk.X, pady=5)
+
         
         # Return (Increase)
         tk.Button(action_card, text="استرجاع عدة (+)", command=lambda: self.update_stock('return'), bg='#2980B9', fg='white', font=self.fonts['button'], relief=tk.RAISED, bd=2, height=1).pack(fill=tk.X, pady=5)
@@ -241,8 +240,7 @@ class InventoryPage:
         
         action_map = {
             'buy': ('شراء', 1),
-            'return': ('استرجاع', 1),
-            'sell': ('بيع', -1)
+            'return': ('استرجاع', 1)
         }
         
         verb, multiplier = action_map[action]

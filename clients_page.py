@@ -171,7 +171,6 @@ class ClientsPage:
             
         # Buttons
         # Right side
-        create_btn("فواتير العملاء المضافة", lambda: self.create_invoice('added'), self.colors['button_bg']).pack(side=tk.RIGHT, padx=5)
         create_btn("فواتير العملاء الجاهزة", self.open_ready_invoices, self.colors['button_bg']).pack(side=tk.RIGHT, padx=5)
         
         # Left side

@@ -48,7 +48,21 @@ class StartMenu:
     
     def load_background_image(self):
         """تحميل الصورة وتعديل حجمها"""
-        image_path = "Screenshot 2025-11-24 202612.png"
+        # التعامل مع المسارات في حالة التشغيل كملف تنفيذي
+        import sys
+        if getattr(sys, 'frozen', False):
+            # عند التشغيل كـ exe
+            base_path = sys._MEIPASS
+        else:
+            # عند التشغيل كـ script
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            
+        image_name = "Screenshot 2025-11-24 202612.png"
+        image_path = os.path.join(base_path, image_name)
+        
+        # محاولة بديلة: البحث في المجلد الحالي إذا لم توجد في المسار الأساسي
+        if not os.path.exists(image_path):
+             image_path = os.path.join(os.getcwd(), image_name)
         
         if not os.path.exists(image_path):
             print(f"تحذير: لم يتم العثور على الصورة في {image_path}")
@@ -135,8 +149,8 @@ class StartMenu:
             ("اضافة تحصيل", self.open_add_collection),
             ("جديد", self.open_new_entry),
             ("ترحيل الزراعة", self.open_agriculture_transfer),
-            ("اضافة وجبة", self.open_add_meal),
             ("حسابات", self.open_accounts_module),
+            ("مزامنة البيانات", self.open_data_sync),
         ]
 
         # زر ترحيل الزراعة هو المرجع في الحجم
@@ -752,6 +766,299 @@ class StartMenu:
         
         tk.Button(exp_window, text="حفظ المصروف", command=save_expense, **btn_style).pack(pady=20)
         exp_window.bind('<Return>', lambda e: save_expense())
+
+    def open_data_sync(self):
+        """فتح نافذة مزامنة البيانات"""
+        from tkinter import filedialog
+        import os
+        
+        sync_window = tk.Toplevel(self.root)
+        sync_window.title("مزامنة البيانات")
+        sync_window.geometry("700x600")
+        sync_window.configure(bg=self.colors['pink'])
+        
+        # توسيط النافذة
+        sync_window.update_idletasks()
+        x = (sync_window.winfo_screenwidth() // 2) - 350
+        y = (sync_window.winfo_screenheight() // 2) - 300
+        sync_window.geometry(f"700x600+{x}+{y}")
+        
+        # Header
+        header_frame = tk.Frame(sync_window, bg=self.colors['red'], height=70)
+        header_frame.pack(fill=tk.X)
+        header_frame.pack_propagate(False)
+        
+        tk.Label(
+            header_frame, 
+            text="مزامنة البيانات", 
+            font=('Playpen Sans Arabic', 20, 'bold'), 
+            bg=self.colors['red'], 
+            fg='white'
+        ).pack(pady=20)
+        
+        # Main Content
+        content_frame = tk.Frame(sync_window, bg=self.colors['pink'])
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Info Card
+        info_card = tk.Frame(content_frame, bg=self.colors['white'], padx=20, pady=15)
+        info_card.pack(fill=tk.X, pady=(0, 15))
+        
+        info_text = """
+نظام مزامنة البيانات يتيح لك:
+• تصدير جميع البيانات إلى ملف احتياطي
+• نقل البيانات إلى جهاز آخر
+• استيراد البيانات من ملف احتياطي
+• الاحتفاظ بنسخ احتياطية يومية
+        """
+        
+        tk.Label(
+            info_card, 
+            text=info_text, 
+            font=('Arial', 11), 
+            bg=self.colors['white'], 
+            fg='#2C3E50',
+            justify='right'
+        ).pack(anchor='e')
+        
+        # Export Section
+        export_card = tk.Frame(content_frame, bg=self.colors['white'], padx=20, pady=15)
+        export_card.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(
+            export_card, 
+            text="📤 تصدير البيانات", 
+            font=('Playpen Sans Arabic', 14, 'bold'), 
+            bg=self.colors['white'], 
+            fg=self.colors['red']
+        ).pack(anchor='e', pady=(0, 10))
+        
+        tk.Label(
+            export_card, 
+            text="إنشاء نسخة احتياطية من جميع البيانات", 
+            font=('Arial', 10), 
+            bg=self.colors['white'], 
+            fg='#7F8C8D'
+        ).pack(anchor='e', pady=(0, 10))
+        
+        def export_data():
+            try:
+                from data_sync import DataSync
+                sync = DataSync()
+                filepath = sync.create_daily_backup()
+                
+                messagebox.showinfo(
+                    "نجاح", 
+                    f"تم تصدير البيانات بنجاح!\n\nالملف: {os.path.basename(filepath)}\nالمسار: {filepath}",
+                    parent=sync_window
+                )
+            except Exception as e:
+                messagebox.showerror("خطأ", f"حدث خطأ أثناء التصدير:\n{str(e)}", parent=sync_window)
+        
+        tk.Button(
+            export_card, 
+            text="تصدير البيانات الآن", 
+            command=export_data, 
+            bg=self.colors['orange'], 
+            fg='white', 
+            font=('Playpen Sans Arabic', 12, 'bold'), 
+            width=20,
+            relief=tk.FLAT,
+            cursor='hand2',
+            height=2
+        ).pack(pady=5)
+        
+        # Import Section
+        import_card = tk.Frame(content_frame, bg=self.colors['white'], padx=20, pady=15)
+        import_card.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(
+            import_card, 
+            text="📥 استيراد البيانات", 
+            font=('Playpen Sans Arabic', 14, 'bold'), 
+            bg=self.colors['white'], 
+            fg=self.colors['red']
+        ).pack(anchor='e', pady=(0, 10))
+        
+        tk.Label(
+            import_card, 
+            text="استيراد البيانات من ملف احتياطي", 
+            font=('Arial', 10), 
+            bg=self.colors['white'], 
+            fg='#7F8C8D'
+        ).pack(anchor='e', pady=(0, 10))
+        
+        # Merge mode selection
+        merge_frame = tk.Frame(import_card, bg=self.colors['white'])
+        merge_frame.pack(anchor='e', pady=(0, 10))
+        
+        tk.Label(
+            merge_frame, 
+            text="طريقة الدمج:", 
+            font=('Arial', 10, 'bold'), 
+            bg=self.colors['white']
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        merge_var = tk.StringVar(value='update')
+        
+        merge_options = [
+            ('تحديث (إضافة وتحديث)', 'update'),
+            ('استبدال (حذف القديم)', 'replace'),
+            ('تخطي (إضافة فقط)', 'skip')
+        ]
+        
+        for text, value in merge_options:
+            tk.Radiobutton(
+                merge_frame,
+                text=text,
+                variable=merge_var,
+                value=value,
+                font=('Arial', 9),
+                bg=self.colors['white'],
+                activebackground=self.colors['white']
+            ).pack(side=tk.RIGHT, padx=5)
+        
+        def import_data():
+            # فتح نافذة اختيار الملف
+            filepath = filedialog.askopenfilename(
+                title="اختر ملف النسخة الاحتياطية",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                initialdir="data_exports",
+                parent=sync_window
+            )
+            
+            if not filepath:
+                return
+            
+            # تأكيد الاستيراد
+            confirm = messagebox.askyesno(
+                "تأكيد الاستيراد",
+                f"هل أنت متأكد من استيراد البيانات من:\n{os.path.basename(filepath)}\n\nطريقة الدمج: {merge_var.get()}",
+                parent=sync_window
+            )
+            
+            if not confirm:
+                return
+            
+            try:
+                from data_sync import DataSync
+                sync = DataSync()
+                stats = sync.import_data(filepath, merge_var.get())
+                
+                messagebox.showinfo(
+                    "نجاح", 
+                    f"تم استيراد البيانات بنجاح!\n\n"
+                    f"الجداول المعالجة: {stats['tables_processed']}\n"
+                    f"السجلات المُدرجة: {stats['rows_inserted']}\n"
+                    f"السجلات المُحدثة: {stats['rows_updated']}\n"
+                    f"السجلات المتخطاة: {stats['rows_skipped']}\n"
+                    f"الأخطاء: {len(stats['errors'])}",
+                    parent=sync_window
+                )
+            except Exception as e:
+                messagebox.showerror("خطأ", f"حدث خطأ أثناء الاستيراد:\n{str(e)}", parent=sync_window)
+        
+        tk.Button(
+            import_card, 
+            text="استيراد من ملف", 
+            command=import_data, 
+            bg=self.colors['yellow'], 
+            fg='#2C3E50', 
+            font=('Playpen Sans Arabic', 12, 'bold'), 
+            width=20,
+            relief=tk.FLAT,
+            cursor='hand2',
+            height=2
+        ).pack(pady=5)
+        
+        # View Backups Section
+        backups_card = tk.Frame(content_frame, bg=self.colors['white'], padx=20, pady=15)
+        backups_card.pack(fill=tk.X)
+        
+        tk.Label(
+            backups_card, 
+            text="📦 إدارة النسخ الاحتياطية", 
+            font=('Playpen Sans Arabic', 14, 'bold'), 
+            bg=self.colors['white'], 
+            fg=self.colors['red']
+        ).pack(anchor='e', pady=(0, 10))
+        
+        def view_backups():
+            try:
+                from data_sync import DataSync
+                sync = DataSync()
+                backups = sync.list_backups()
+                
+                if not backups:
+                    messagebox.showinfo("النسخ الاحتياطية", "لا توجد نسخ احتياطية", parent=sync_window)
+                    return
+                
+                # إنشاء نافذة لعرض النسخ
+                backups_list_window = tk.Toplevel(sync_window)
+                backups_list_window.title("النسخ الاحتياطية المتاحة")
+                backups_list_window.geometry("600x400")
+                backups_list_window.configure(bg=self.colors['pink'])
+                
+                # توسيط
+                backups_list_window.update_idletasks()
+                x = (backups_list_window.winfo_screenwidth() // 2) - 300
+                y = (backups_list_window.winfo_screenheight() // 2) - 200
+                backups_list_window.geometry(f"600x400+{x}+{y}")
+                
+                # Listbox
+                listbox_frame = tk.Frame(backups_list_window, bg=self.colors['white'])
+                listbox_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+                
+                scrollbar = tk.Scrollbar(listbox_frame)
+                scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+                
+                listbox = tk.Listbox(
+                    listbox_frame,
+                    font=('Arial', 10),
+                    yscrollcommand=scrollbar.set,
+                    bg='white',
+                    selectmode=tk.SINGLE
+                )
+                listbox.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+                scrollbar.config(command=listbox.yview)
+                
+                for backup in backups:
+                    display_text = f"{backup['filename']} - {backup['modified'].strftime('%Y-%m-%d %H:%M')} - {backup['size_kb']:.2f} KB"
+                    listbox.insert(tk.END, display_text)
+                
+                def open_folder():
+                    import subprocess
+                    folder_path = os.path.abspath("data_exports")
+                    if os.path.exists(folder_path):
+                        subprocess.Popen(f'explorer "{folder_path}"')
+                
+                tk.Button(
+                    backups_list_window,
+                    text="فتح مجلد النسخ الاحتياطية",
+                    command=open_folder,
+                    bg=self.colors['orange'],
+                    fg='white',
+                    font=('Playpen Sans Arabic', 11, 'bold'),
+                    relief=tk.FLAT,
+                    cursor='hand2'
+                ).pack(pady=10)
+                
+            except Exception as e:
+                messagebox.showerror("خطأ", f"حدث خطأ:\n{str(e)}", parent=sync_window)
+        
+        tk.Button(
+            backups_card, 
+            text="عرض النسخ الاحتياطية", 
+            command=view_backups, 
+            bg='#95A5A6', 
+            fg='white', 
+            font=('Playpen Sans Arabic', 11, 'bold'), 
+            width=20,
+            relief=tk.FLAT,
+            cursor='hand2',
+            height=1
+        ).pack(pady=5)
+
 
 
 def main():
