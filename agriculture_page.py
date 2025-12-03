@@ -28,78 +28,129 @@ class AgricultureTransferPage:
         
         self.window = tk.Toplevel(parent_window)
         self.window.title("نظام ترحيل الزراعة")
-        self.window.geometry("1300x850")
+        self.window.geometry("1400x800")
         self.window.configure(bg=self.colors['bg'])
         self.window.resizable(True, True)
         
         self.fonts = {
-            'header': ('Playpen Sans Arabic', 20, 'bold'),
-            'label': ('Playpen Sans Arabic', 14, 'bold'),
-            'entry': ('Arial', 14),
-            'button': ('Playpen Sans Arabic', 14, 'bold')
+            'header': ('Playpen Sans Arabic', 22, 'bold'),
+            'label': ('Playpen Sans Arabic', 16, 'bold'),
+            'entry': ('Arial', 18),
+            'button': ('Playpen Sans Arabic', 16, 'bold'),
+            'table': ('Playpen Sans Arabic', 18, 'bold')
         }
         
         self.shipment_var = tk.StringVar()
         self.item_var = tk.StringVar()
         self.price_var = tk.StringVar()
         
-        self.shipment_var.trace('w', lambda *args: self.load_data())
-        self.item_var.trace('w', lambda *args: self.load_data())
-        self.price_var.trace('w', lambda *args: self.load_data())
-        
         self.table_rows = []
+        self.current_row_index = 0
         self.setup_ui()
+        
+        # Add traces AFTER creating the first row
+        self.shipment_var.trace('w', self.update_existing_rows)
+        self.item_var.trace('w', self.update_existing_rows)
+        self.price_var.trace('w', self.update_existing_rows)
+
+    def update_existing_rows(self, *args):
+        """Update all existing editable rows when top fields change"""
+        client_name = self.shipment_var.get()
+        item_name = self.item_var.get()
+        price = self.price_var.get()
+        
+        for row in self.table_rows:
+            # Only update if row is not saved (check if seller name field is editable)
+            try:
+                if row[0]['state'] != 'readonly':  # If seller name is editable, row is not saved
+                    # Update client name (column 1)
+                    row[1].config(state='normal')
+                    row[1].delete(0, tk.END)
+                    if client_name:
+                        row[1].insert(0, client_name)
+                    row[1].config(state='readonly')
+                    
+                    # Update item name (column 2)
+                    row[2].config(state='normal')
+                    row[2].delete(0, tk.END)
+                    if item_name:
+                        row[2].insert(0, item_name)
+                    row[2].config(state='readonly')
+                    
+                    # Update price (column 3)
+                    row[3].config(state='normal')
+                    row[3].delete(0, tk.END)
+                    if price:
+                        row[3].insert(0, price)
+                    row[3].config(state='readonly')
+            except:
+                pass
 
     def setup_ui(self):
         self.create_top_bar()
         main_frame = tk.Frame(self.window, bg=self.colors['bg'])
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
         self.create_table(main_frame)
-        self.create_bottom_bar()
-        
+
     def create_top_bar(self):
-        top_frame = tk.Frame(self.window, bg=self.colors['header_bg'], height=80, padx=20)
+        top_frame = tk.Frame(self.window, bg=self.colors['header_bg'], height=100, padx=30)
         top_frame.pack(fill=tk.X)
         top_frame.pack_propagate(False)
         
-        controls = tk.Frame(top_frame, bg=self.colors['header_bg'])
-        controls.pack(fill=tk.BOTH, expand=True, pady=20)
-        
         def make_entry(parent, var, width=20):
             return tk.Entry(parent, textvariable=var, font=self.fonts['entry'], width=width, justify='center')
-
-        shipment_frame = tk.Frame(controls, bg=self.colors['header_bg'])
-        shipment_frame.pack(side=tk.RIGHT, padx=10)
         
-        date_var = tk.StringVar(value=datetime.now().strftime("%Y/%m/%d"))
-        date_entry = make_entry(shipment_frame, date_var, width=12)
-        date_entry.pack(side=tk.RIGHT, padx=5)
+        # Single Row - All input fields
+        controls_row = tk.Frame(top_frame, bg=self.colors['header_bg'])
+        controls_row.pack(fill=tk.X, pady=25)
+        
+        # Date (Left)
+        date_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
+        date_frame.pack(side=tk.LEFT, padx=10)
+        
+        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y/%m/%d"))
+        date_entry = make_entry(date_frame, self.date_var, width=12)
+        date_entry.pack(side=tk.LEFT, padx=5)
         date_entry.config(state='readonly', bg='#E8F8F5')
         
-        tk.Label(shipment_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+        tk.Label(date_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
-        # Get existing clients for dropdown
+        # Price (Center-Left)
+        price_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
+        price_frame.pack(side=tk.LEFT, padx=10)
+        
+        self.price_entry = make_entry(price_frame, self.price_var, width=12)
+        self.price_entry.pack(side=tk.LEFT, padx=5)
+        self.price_entry.bind('<Return>', self.on_price_enter)
+        
+        tk.Label(price_frame, text="السعر:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
+        
+        # Client (Center) - swapped with Item
+        client_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
+        client_frame.pack(side=tk.RIGHT, padx=10)
+        
         clients = self.db.get_all_clients_accounts()
         client_names = [c[1] for c in clients]
         
-        client_combo = ttk.Combobox(shipment_frame, textvariable=self.shipment_var, values=client_names, 
-                                    font=self.fonts['entry'], width=23, justify='center')
-        client_combo.pack(side=tk.RIGHT, padx=5)
+        self.client_combo = ttk.Combobox(client_frame, textvariable=self.shipment_var, values=client_names, 
+                                        font=self.fonts['entry'], width=25, justify='center')
+        self.client_combo.pack(side=tk.LEFT, padx=5)
+        self.client_combo.bind('<Return>', self.on_client_enter)
+        self.client_combo.focus()
         
-        tk.Label(shipment_frame, text="اسم العميل:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+        tk.Label(client_frame, text="اسم العميل:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
-        item_frame = tk.Frame(controls, bg=self.colors['header_bg'])
-        item_frame.pack(side=tk.RIGHT, padx=20)
-        
-        tk.Button(item_frame, text="بيان الاصناف", command=self.show_items_list, font=('Playpen Sans Arabic', 10, 'bold'), bg='#2E86C1', fg='white').pack(side=tk.RIGHT, padx=5)
-        
-        tk.Label(item_frame, text="الصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+        # Item (Right) - swapped with Client
+        item_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
+        item_frame.pack(side=tk.RIGHT, padx=10)
         
         meals = self.db.get_all_meals()
         meal_names = [m[1] for m in meals]
         
-        item_combo = ttk.Combobox(item_frame, textvariable=self.item_var, values=meal_names, font=self.fonts['entry'], width=20, justify='center')
-        item_combo.pack(side=tk.RIGHT)
+        self.item_combo = ttk.Combobox(item_frame, textvariable=self.item_var, values=meal_names, 
+                                       font=self.fonts['entry'], width=15, justify='center')
+        self.item_combo.pack(side=tk.LEFT, padx=5)
+        self.item_combo.bind('<Return>', self.on_item_enter)
         
         def on_item_change(e=None):
             item_name = self.item_var.get()
@@ -108,36 +159,22 @@ class AgricultureTransferPage:
                     if meal[1] == item_name:
                         self.price_var.set(str(meal[2]))
                         return
-        item_combo.bind('<<ComboboxSelected>>', on_item_change)
+        self.item_combo.bind('<<ComboboxSelected>>', on_item_change)
+        
+        tk.Label(item_frame, text="الصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
 
-        price_frame = tk.Frame(controls, bg=self.colors['header_bg'])
-        price_frame.pack(side=tk.LEFT, padx=10)
-        tk.Label(price_frame, text="سعر الوحدة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
-        price_entry = make_entry(price_frame, self.price_var, width=15)
-        price_entry.pack(side=tk.RIGHT)
-
-    def show_items_list(self):
-        """Show a window with all items"""
-        list_window = tk.Toplevel(self.window)
-        list_window.title("بيان الاصناف")
-        list_window.geometry("400x500")
-        list_window.configure(bg='white')
+    def on_client_enter(self, event=None):
+        """When Enter is pressed in client field, move to item field"""
+        self.item_combo.focus()
         
-        tk.Label(list_window, text="قائمة الاصناف المسجلة", font=('Playpen Sans Arabic', 16, 'bold'), bg='white', fg=self.colors['header_bg']).pack(pady=10)
+    def on_item_enter(self, event=None):
+        """When Enter is pressed in item field, move to price field"""
+        self.price_entry.focus()
         
-        list_frame = tk.Frame(list_window, bg='white')
-        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
-        
-        scrollbar = ttk.Scrollbar(list_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        lb = tk.Listbox(list_frame, font=('Arial', 14), yscrollcommand=scrollbar.set, justify='right')
-        lb.pack(fill=tk.BOTH, expand=True)
-        scrollbar.config(command=lb.yview)
-        
-        meals = self.db.get_all_meals()
-        for meal in meals:
-            lb.insert(tk.END, f"{meal[1]} - {meal[2]} ج.م")
+    def on_price_enter(self, event=None):
+        """When Enter is pressed in price field, move to first row"""
+        if self.table_rows:
+            self.table_rows[0][0].focus()
 
     def create_table(self, parent):
         table_frame = tk.Frame(parent, bg=self.colors['bg'])
@@ -160,197 +197,177 @@ class AgricultureTransferPage:
         headers = ['اسم البائع', 'اسم العميل', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد']
         
         for i, text in enumerate(headers):
-            lbl = tk.Label(self.scrollable_frame, text=text, font=('Playpen Sans Arabic', 16, 'bold'),
-                          bg=self.col_colors[i], relief=tk.RAISED, bd=2, height=2)
-            lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
+            lbl = tk.Label(self.scrollable_frame, text=text, font=self.fonts['table'],
+                          bg=self.col_colors[i], relief=tk.RAISED, bd=3, height=2)
+            lbl.grid(row=0, column=i, sticky='nsew', padx=2, pady=2)
             self.scrollable_frame.grid_columnconfigure(i, weight=1)
             
-        self.load_data()
+        # Create first row only
+        self.add_new_row()
 
-    def create_bottom_bar(self):
-        btn_frame = tk.Frame(self.window, bg=self.colors['bg'], pady=20)
-        btn_frame.pack(fill=tk.X)
+    def add_new_row(self):
+        """Add a new editable row"""
+        row_num = len(self.table_rows) + 1
         
-        tk.Button(btn_frame, text="ترحيل", command=self.save_transfer, font=self.fonts['button'],
-                 bg=self.colors['button_bg'], fg='white', relief=tk.RAISED, bd=3, cursor='hand2',
-                 width=20, height=2).pack(side=tk.RIGHT, padx=20)
+        entry_style = {
+            'font': self.fonts['table'],
+            'relief': tk.SUNKEN,
+            'bd': 2,
+            'justify': 'center'
+        }
+        
+        row_widgets = []
+        for col_idx in range(6):
+            e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
+            
+            # Pre-fill client name, item, and price
+            if col_idx == 1:  # Client name
+                shipment_val = self.shipment_var.get()
+                if shipment_val:
+                    e.insert(0, shipment_val)
+                    e.config(state='readonly')
+            elif col_idx == 2:  # Item name
+                item_val = self.item_var.get()
+                if item_val:
+                    e.insert(0, item_val)
+                    e.config(state='readonly')
+            elif col_idx == 3:  # Price
+                price_val = self.price_var.get()
+                if price_val:
+                    e.insert(0, price_val)
+                    e.config(state='readonly')
+            
+            e.grid(row=row_num, column=col_idx, sticky='nsew', padx=2, pady=2, ipady=15)
+            
+            # Bind Enter key to move to next field or save
+            if col_idx == 0:  # Seller name
+                e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_weight(idx))
+            elif col_idx == 4:  # Weight
+                e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_count(idx))
+            elif col_idx == 5:  # Count
+                e.bind('<Return>', lambda ev, idx=row_num-1: self.save_current_row(idx))
+            
+            row_widgets.append(e)
+        
+        self.table_rows.append(row_widgets)
+        
+        # Focus on seller name field
+        if row_widgets:
+            row_widgets[0].focus()
 
-    def load_data(self):
+    def move_to_weight(self, row_idx):
+        """Move focus to weight field"""
+        if row_idx < len(self.table_rows):
+            self.table_rows[row_idx][4].focus()
+    
+    def move_to_count(self, row_idx):
+        """Move focus to count field"""
+        if row_idx < len(self.table_rows):
+            self.table_rows[row_idx][5].focus()
+
+    def save_current_row(self, row_idx):
+        """Save the current row and create a new one"""
+        if row_idx >= len(self.table_rows):
+            return
+        
+        row = self.table_rows[row_idx]
+        
+        client_name = self.shipment_var.get().strip()
+        item_name_input = self.item_var.get().strip()
+        unit_price_str = self.price_var.get().strip()
+        seller_name_input = row[0].get().strip()
+        weight_str = row[4].get().strip()
+        count_str = row[5].get().strip()
+        
+        # Validation
+        if not client_name:
+            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم العميل أولاً")
+            self.client_combo.focus()
+            return
+            
+        if not item_name_input:
+            messagebox.showwarning("تنبيه", "الرجاء إدخال الصنف أولاً")
+            self.item_combo.focus()
+            return
+        
+        if not seller_name_input:
+            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم البائع")
+            row[0].focus()
+            return
+        
+        try:
+            weight = float(weight_str) if weight_str else 0.0
+            count = float(count_str) if count_str else 0.0
+            
+            if weight == 0 and count == 0:
+                messagebox.showwarning("تنبيه", "الرجاء إدخال الوزن أو العدد")
+                row[4].focus()
+                return
+            
+            unit_price = float(unit_price_str) if unit_price_str else 0.0
+            
+            # Resolve Item Name
+            meals = self.db.get_all_meals()
+            final_item_name = item_name_input
+            item_exists = False
+            
+            for meal in meals:
+                if meal[1].strip().lower() == item_name_input.lower():
+                    final_item_name = meal[1]
+                    item_exists = True
+                    break
+            
+            # Add item if new
+            if not item_exists:
+                self.db.add_meal(final_item_name, unit_price, 0)
+            
+            # Calculate amount
+            amount = 0.0
+            if weight > 0:
+                amount = weight * unit_price
+            elif count > 0:
+                amount = count * unit_price
+            
+            # 1. Client Action (Credit)
+            self.db.add_client_debt(client_name, -amount)
+            
+            # Record 'in' transfer for Client
+            self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, 
+                                            unit_price, weight, count, "", "in")
+            
+            # 2. Seller Action (Debit)
+            seller_data = self.db.get_seller_by_name(seller_name_input)
+            if not seller_data:
+                self.db.add_seller_account(seller_name_input, 0, 0)
+                seller_data = self.db.get_seller_by_name(seller_name_input)
+            
+            seller_id = seller_data[0]
+            
+            # Record 'out' transfer for Seller
+            self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, 
+                                            unit_price, weight, count, "", "out")
+            
+            # Add Transaction to Seller Account
+            note = f"نقلة من العميل {client_name}"
+            today_date = datetime.now().strftime("%Y-%m-%d")
+            
+            self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
+                                          final_item_name, today_date, "", "", note)
+            
+            # Make current row readonly
+            for widget in row:
+                widget.config(state='readonly', bg='#D5F5E3')  # Light green to show saved
+            
+            # Add new row
+            self.add_new_row()
+            
+        except ValueError as e:
+            messagebox.showerror("خطأ", f"خطأ في البيانات المدخلة: {str(e)}")
+
+    def clear_table(self):
+        """Clear all rows and start fresh"""
         for row in self.table_rows:
             for widget in row:
                 widget.destroy()
         self.table_rows = []
-        
-        saved_data = self.db.get_agriculture_transfers()
-        saved_data.reverse()
-        
-        # Get filter values
-        filter_client = self.shipment_var.get().strip()
-        filter_item = self.item_var.get().strip()
-        
-        # Filter data based on client name and item name
-        filtered_data = []
-        for data_row in saved_data:
-            # data_row: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type
-            client_name = data_row[1]  # shipment_name is now client_name
-            item_name = data_row[3]
-            
-            # Apply filters
-            match = True
-            if filter_client and filter_client.lower() not in client_name.lower():
-                match = False
-            if filter_item and filter_item.lower() not in item_name.lower():
-                match = False
-            
-            if match:
-                filtered_data.append(data_row)
-        
-        entry_style = {'font': ('Playpen Sans Arabic', 14), 'relief': tk.SUNKEN, 'bd': 1, 'justify': 'center'}
-        
-        row_num = 1
-        
-        # Display filtered data
-        for data_row in filtered_data:
-            row_widgets = []
-            vals = [data_row[2], data_row[1], data_row[3], data_row[4], data_row[5], data_row[6]]
-            
-            for col_idx, val in enumerate(vals):
-                e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
-                e.insert(0, str(val))
-                e.config(state='readonly')
-                e.grid(row=row_num, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
-                row_widgets.append(e)
-            
-            self.table_rows.append(row_widgets)
-            row_num += 1
-            
-        # Add empty editable rows for new entries
-        total_target_rows = 20
-        current_rows = len(self.table_rows)
-        for i in range(total_target_rows - current_rows):
-            row_widgets = []
-            for col_idx in range(6):
-                e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
-                
-                # Pre-fill client name and item/price if selected
-                if col_idx == 1:
-                    shipment_val = self.shipment_var.get()
-                    if shipment_val:
-                        e.insert(0, shipment_val)
-                elif col_idx == 2:
-                    item_val = self.item_var.get()
-                    if item_val:
-                        e.insert(0, item_val)
-                elif col_idx == 3:
-                    price_val = self.price_var.get()
-                    if price_val:
-                        e.insert(0, price_val)
-                
-                e.grid(row=row_num, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
-                row_widgets.append(e)
-            
-            self.table_rows.append(row_widgets)
-            row_num += 1
-
-    def save_transfer(self):
-        client_name = self.shipment_var.get().strip()
-        item_name_input = self.item_var.get().strip()
-        unit_price_str = self.price_var.get().strip()
-        
-        if not client_name:
-            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم العميل")
-            return
-            
-        if not item_name_input:
-            messagebox.showwarning("تنبيه", "الرجاء إدخال الصنف")
-            return
-        
-        # Resolve Item Name
-        meals = self.db.get_all_meals()
-        final_item_name = item_name_input
-        item_exists = False
-        
-        for meal in meals:
-            if meal[1].strip().lower() == item_name_input.lower():
-                final_item_name = meal[1]
-                item_exists = True
-                break
-        
-        # Add item if new
-        if not item_exists:
-            try:
-                price_val = float(unit_price_str) if unit_price_str else 0.0
-                self.db.add_meal(final_item_name, price_val, 0)
-            except ValueError:
-                messagebox.showerror("خطأ", "سعر الوحدة غير صحيح")
-                return
-        
-        try:
-            unit_price = float(unit_price_str) if unit_price_str else 0.0
-        except ValueError:
-            messagebox.showerror("خطأ", "سعر الوحدة غير صحيح")
-            return
-        
-        # Process Rows
-        rows_processed = 0
-        
-        for row in self.table_rows:
-            seller_name_input = row[0].get().strip()
-            weight_str = row[4].get().strip()
-            count_str = row[5].get().strip()
-            
-            # Skip empty rows or rows without seller name
-            if not seller_name_input:
-                continue
-                
-            try:
-                weight = float(weight_str) if weight_str else 0.0
-                count = float(count_str) if count_str else 0.0
-                
-                if weight == 0 and count == 0:
-                    continue
-                
-                amount = 0.0
-                if weight > 0:
-                    amount = weight * unit_price
-                elif count > 0:
-                    amount = count * unit_price
-                
-                # 1. Client Action (Credit - He brought goods)
-                # We use negative amount to indicate credit (Company owes Client)
-                self.db.add_client_debt(client_name, -amount)
-                
-                # Record 'in' transfer for Client
-                self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, unit_price, weight, count, "", "in")
-                
-                # 2. Seller Action (Debit - He took goods)
-                # Check/Create Seller
-                seller_data = self.db.get_seller_by_name(seller_name_input)
-                if not seller_data:
-                    self.db.add_seller_account(seller_name_input, 0, 0)
-                    seller_data = self.db.get_seller_by_name(seller_name_input)
-                
-                seller_id = seller_data[0]
-                
-                # Record 'out' transfer for Seller
-                self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, unit_price, weight, count, "", "out")
-                
-                # Add Transaction to Seller Account
-                note = f"نقلة من العميل {client_name}"
-                today_date = datetime.now().strftime("%Y-%m-%d")
-                
-                self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
-                                               final_item_name, today_date, "", "", note)
-                
-                rows_processed += 1
-                
-            except ValueError:
-                continue
-
-        if rows_processed > 0:
-            messagebox.showinfo("نجاح", f"تم ترحيل {rows_processed} عملية بنجاح")
-            self.item_var.set("")
-            self.price_var.set("")
-            self.load_data()
-        else:
-            messagebox.showwarning("تنبيه", "لم يتم إدخال بيانات صحيحة في الجدول")
+        self.add_new_row()

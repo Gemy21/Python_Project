@@ -70,9 +70,7 @@ class ReadyInvoicesPage:
         buttons_frame.pack(pady=10)
         
         # Buttons
-        self.create_btn(buttons_frame, "إضافة فاتورة", self.add_invoice, width=15).pack(side=tk.LEFT, padx=10)
         self.create_btn(buttons_frame, "معاينة فاتورة", self.preview_invoice, width=15).pack(side=tk.LEFT, padx=10)
-        self.create_btn(buttons_frame, "تعديل فاتورة", self.edit_invoice, width=15).pack(side=tk.LEFT, padx=10)
         
         # --- Main Content Area (Single Row Display) ---
         content_frame = tk.Frame(self.window, bg=self.colors['bg'])
@@ -411,11 +409,10 @@ class ReadyInvoicesPage:
         dialog.bind('<Escape>', lambda e: dialog.destroy())
     
     def print_client_invoice(self, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total):
-        """Print client invoice using PrintPreviewWindow"""
-        from print_utils import PrintPreviewWindow
+        """Print client invoice using ClientInvoicePrintWindow"""
+        from client_invoice_print import ClientInvoicePrintWindow
         
-        # Prepare invoice data similar to seller invoice format
-        # Create transactions list for display
+        # Prepare invoice data
         transactions = []
         
         # Add transfer data if available
@@ -429,7 +426,7 @@ class ReadyInvoicesPage:
             
             transactions.append((item_name, weight, count, price, amount, "بضاعة"))
         
-        # Add deductions as negative transactions
+        # Add deductions as separate transactions
         if nolon > 0:
             transactions.append(("نولون", 0, 0, 0, nolon, "خصم"))
         if commission > 0:
@@ -441,18 +438,17 @@ class ReadyInvoicesPage:
         if cash > 0:
             transactions.append(("نقدية", 0, 0, 0, cash, "خصم"))
         
-        # Prepare invoice data
+        # Prepare invoice data for ClientInvoicePrintWindow
         invoice_data = {
-            'seller_name': owner_name,
+            'client_name': owner_name,
             'invoice_date': invoice_date,
-            'old_balance': 0,  # No old balance for client invoices
             'transactions': transactions,
             'total_goods': net_amount,
-            'total_paid': nolon + commission + mashal + rent + cash,
-            'final_balance': final_total
+            'total_deductions': nolon + commission + mashal + rent + cash,
+            'final_total': final_total
         }
         
-        PrintPreviewWindow(self.window, invoice_data)
+        ClientInvoicePrintWindow(self.window, invoice_data)
     
     def preview_invoice(self):
         """Preview and print invoice - this is the main print button"""

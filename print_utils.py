@@ -352,49 +352,61 @@ class PrintPreviewWindow:
                     pass
             
             # إنشاء PDF
-            c = canvas.Canvas(filepath, pagesize=A4)
-            width, height = A4
+            # الكشف: عرض 10 سم × طول 29 سم
+            from reportlab.lib.units import cm
+            page_width = 10 * cm
+            page_height = 29 * cm
+            
+            c = canvas.Canvas(filepath, pagesize=(page_width, page_height))
+            width, height = page_width, page_height
             
             # الرأس
-            c.setFont(font_name, 24)
-            c.drawCentredString(width/2, height - 2*cm, "كشف حساب")
+            c.setFont(font_name, 16)  # تصغير الخط ليناسب العرض الضيق
+            c.drawCentredString(width/2, height - 1*cm, "كشف حساب")
             
-            c.setFont(font_name, 14)
-            c.drawCentredString(width/2, height - 3*cm, "خلفاء الحاج محي غريب بعجر")
+            c.setFont(font_name, 10)
+            c.drawCentredString(width/2, height - 1.7*cm, "خلفاء الحاج محي غريب بعجر")
             
             # معلومات البائع
-            y = height - 4.5*cm
-            c.setFont(font_name, 12)
-            c.drawRightString(width - 2*cm, y, f"البائع: {self.data['seller_name']}")
-            c.drawString(2*cm, y, f"التاريخ: {self.data['invoice_date']}")
+            y = height - 2.5*cm
+            c.setFont(font_name, 9)
+            c.drawRightString(width - 0.3*cm, y, f"البائع: {self.data['seller_name']}")
+            y -= 0.5*cm
+            c.drawRightString(width - 0.3*cm, y, f"التاريخ: {self.data['invoice_date']}")
             
             # الرصيد السابق
             if self.data['old_balance'] != 0:
-                y -= 1*cm
-                c.drawRightString(width - 2*cm, y, f"الرصيد السابق: {self.data['old_balance']:.2f}")
+                y -= 0.6*cm
+                c.setFont(font_name, 8)
+                c.drawRightString(width - 0.3*cm, y, f"الرصيد السابق: {self.data['old_balance']:.2f}")
             
             # جدول المعاملات
-            y -= 2*cm
+            y -= 1*cm
             
             # رؤوس الأعمدة (من اليمين لليسار)
-            c.setFont(font_name, 10)
-            c.drawRightString(width - 2*cm, y, "المبلغ")
-            c.drawRightString(width - 5*cm, y, "العدد")
-            c.drawRightString(width - 8*cm, y, "الوزن")
-            c.drawRightString(width - 11*cm, y, "السعر")
-            c.drawRightString(width - 14*cm, y, "الصنف")
+            c.setFont(font_name, 7)
+            col_positions = [
+                (width - 0.3*cm, "المبلغ"),
+                (width - 2.3*cm, "العدد"),
+                (width - 4*cm, "الوزن"),
+                (width - 5.7*cm, "السعر"),
+                (width - 8*cm, "الصنف")
+            ]
             
-            y -= 0.5*cm
-            c.line(2*cm, y, width - 2*cm, y)
+            for x_pos, header in col_positions:
+                c.drawRightString(x_pos, y, header)
+            
+            y -= 0.3*cm
+            c.line(0.2*cm, y, width - 0.2*cm, y)
             
             # البيانات
-            c.setFont(font_name, 10)
+            c.setFont(font_name, 7)
             for trans in self.data['transactions']:
-                y -= 0.7*cm
-                if y < 3*cm:
+                y -= 0.4*cm
+                if y < 2*cm:
                     c.showPage()
-                    y = height - 2*cm
-                    c.setFont(font_name, 10)
+                    y = height - 1*cm
+                    c.setFont(font_name, 7)
                 
                 item = trans[0] or ""
                 price = f"{trans[3]:.2f}" if trans[3] else ""
@@ -402,20 +414,25 @@ class PrintPreviewWindow:
                 count = f"{trans[2]:.0f}" if trans[2] else ""
                 amount = f"{trans[4]:.2f}" if trans[4] else "0.00"
                 
-                c.drawRightString(width - 2*cm, y, amount)
-                c.drawRightString(width - 5*cm, y, count)
-                c.drawRightString(width - 8*cm, y, weight)
-                c.drawRightString(width - 11*cm, y, price)
-                c.drawRightString(width - 14*cm, y, item)
+                c.drawRightString(width - 0.3*cm, y, amount)
+                c.drawRightString(width - 2.3*cm, y, count)
+                c.drawRightString(width - 4*cm, y, weight)
+                c.drawRightString(width - 5.7*cm, y, price)
+                # تقصير اسم الصنف إذا كان طويلاً
+                if len(item) > 15:
+                    item = item[:15] + "..."
+                c.drawRightString(width - 8*cm, y, item)
             
             # الإجماليات
-            y -= 1.5*cm
-            c.setFont(font_name, 12)
-            c.drawRightString(width - 2*cm, y, f"إجمالي البضاعة: {self.data['total_goods']:.2f}")
-            y -= 0.7*cm
-            c.drawRightString(width - 2*cm, y, f"المدفوع: {self.data['total_paid']:.2f}")
-            y -= 0.7*cm
-            c.drawRightString(width - 2*cm, y, f"المتبقي: {self.data['final_balance']:.2f}")
+            y -= 0.8*cm
+            c.line(0.2*cm, y, width - 0.2*cm, y)
+            y -= 0.5*cm
+            c.setFont(font_name, 8)
+            c.drawRightString(width - 0.3*cm, y, f"إجمالي البضاعة: {self.data['total_goods']:.2f}")
+            y -= 0.4*cm
+            c.drawRightString(width - 0.3*cm, y, f"المدفوع: {self.data['total_paid']:.2f}")
+            y -= 0.4*cm
+            c.drawRightString(width - 0.3*cm, y, f"المتبقي: {self.data['final_balance']:.2f}")
             
             c.save()
             messagebox.showinfo("نجاح", f"تم حفظ PDF بنجاح:\n{filepath}")
@@ -460,24 +477,24 @@ class PrintPreviewWindow:
                 
                 y = margin_y
                 
-                # الخطوط (Charset 178 = Arabic)
+                # الخطوط (أصغر لتناسب العرض الضيق)
                 font_title = win32ui.CreateFont({
                     "name": "Arial",
-                    "height": int(vert_res * 0.03),
+                    "height": int(vert_res * 0.025),
                     "weight": 700,
                     "charset": 178
                 })
                 
                 font_header = win32ui.CreateFont({
                     "name": "Arial",
-                    "height": int(vert_res * 0.02),
+                    "height": int(vert_res * 0.018),
                     "weight": 700,
                     "charset": 178
                 })
                 
                 font_normal = win32ui.CreateFont({
                     "name": "Arial",
-                    "height": int(vert_res * 0.015),
+                    "height": int(vert_res * 0.012),
                     "weight": 400,
                     "charset": 178
                 })

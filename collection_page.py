@@ -64,10 +64,11 @@ class CollectionPage:
         stats_frame = tk.Frame(banner_frame, bg=self.colors['banner_bg'])
         stats_frame.pack(fill=tk.X, pady=20)
         
-        # Calculate Totals
-        total_collection = self.calculate_total_collection()
-        total_expenses = self.calculate_total_expenses()
-        daily_profit = self.calculate_daily_profit()
+        # Calculate Totals using database method
+        totals = self.db.calculate_daily_totals(today_date)
+        total_collection = totals['total_collection']
+        total_expenses = totals['total_expenses']
+        remaining_profit = totals['remaining_profit']
         
         # Collection Card (Right)
         self.create_stat_card(
@@ -78,21 +79,21 @@ class CollectionPage:
             tk.RIGHT
         )
         
-        # Daily Profit Card (Center)
+        # Expenses Card (Center)
         self.create_stat_card(
             stats_frame, 
-            "صافي ربح اليوم", 
-            f"{daily_profit:,.2f}", 
-            '#F39C12',
+            "المصاريف", 
+            f"{total_expenses:,.2f}", 
+            self.colors['accent_red'], 
             tk.RIGHT
         )
         
-        # Expenses Card (Left)
+        # Remaining Profit Card (Left)
         self.create_stat_card(
             stats_frame, 
-            "إجمالي المصاريف", 
-            f"{total_expenses:,.2f}", 
-            self.colors['accent_red'], 
+            "باقي ربح اليوم", 
+            f"{remaining_profit:,.2f}", 
+            '#3498DB',
             tk.LEFT
         )
         
@@ -149,63 +150,7 @@ class CollectionPage:
         )
         btn.grid(row=row, column=col, columnspan=columnspan, padx=20, pady=20)
         
-    # --- Calculations ---
-    def calculate_total_collection(self):
-        """
-        Calculate total collection: Sum of seller transfers (agriculture transfers to sellers)
-        This is the value of goods transferred to sellers (status='متبقي')
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT SUM(amount) FROM seller_transactions WHERE status='متبقي'")
-        result = cursor.fetchone()[0]
-        conn.close()
-        return result if result else 0.0
 
-    def calculate_total_expenses(self):
-        """
-        Calculate total expenses: 
-        Sum of 'expenses' table + Sum of ready client invoices (agriculture_transfers type='in')
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        
-        # 1. Sum of direct expenses
-        cursor.execute("SELECT SUM(amount) FROM expenses")
-        res_expenses = cursor.fetchone()[0]
-        total_expenses = res_expenses if res_expenses else 0.0
-        
-        # 2. Sum of client invoices (transfers type='in')
-        # Value = weight * unit_price OR count * unit_price
-        cursor.execute("SELECT weight, count, unit_price FROM agriculture_transfers WHERE transfer_type='in'")
-        transfers = cursor.fetchall()
-        
-        total_invoices = 0.0
-        for weight, count, price in transfers:
-            w = weight if weight else 0.0
-            c = count if count else 0.0
-            p = price if price else 0.0
-            
-            if w > 0:
-                total_invoices += w * p
-            elif c > 0:
-                total_invoices += c * p
-                
-        conn.close()
-        
-        return total_expenses + total_invoices
-
-    def calculate_daily_profit(self):
-        """
-        Calculate daily profit: Sum of payments received today (status='مدفوع')
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        today = datetime.now().strftime("%Y-%m-%d")
-        cursor.execute("SELECT SUM(amount) FROM seller_transactions WHERE status='مدفوع' AND date=?", (today,))
-        result = cursor.fetchone()[0]
-        conn.close()
-        return result if result else 0.0
 
     # --- Actions ---
     def open_add_collection(self):

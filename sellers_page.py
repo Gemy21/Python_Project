@@ -165,7 +165,7 @@ class SellersPage:
                         if messagebox.askyesno("تأكيد الحذف", "هل أنت متأكد من حذف هذا السجل؟"):
                             self.db.delete_agriculture_transfer(transfer_id)
                             # Refresh the page
-                            for widget in parent.winfo_children():
+                            for widget in self.window.winfo_children():
                                 widget.destroy()
                             self.setup_ui()
                 return delete_row

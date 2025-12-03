@@ -831,19 +831,13 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # حساب إجمالي التحصيل (المدفوع من البائعين)
+        # حساب إجمالي التحصيل (المدفوع من البائعين - باستثناء السماح)
+        # نستثني السماح لأنه ليس نقداً
         cursor.execute('''
             SELECT SUM(amount) FROM seller_transactions 
-            WHERE status = 'مدفوع' AND date = ?
+            WHERE status = 'مدفوع' AND date = ? AND item_name NOT LIKE '%سماح%'
         ''', (target_date,))
         total_collection = cursor.fetchone()[0] or 0.0
-        
-        # حساب باقي ربح اليوم (المتبقي من البضاعة)
-        cursor.execute('''
-            SELECT SUM(amount) FROM seller_transactions 
-            WHERE status = 'متبقي' AND date = ?
-        ''', (target_date,))
-        remaining_profit = cursor.fetchone()[0] or 0.0
         
         # حساب إجمالي المصاريف
         cursor.execute('''
@@ -851,6 +845,9 @@ class Database:
             WHERE expense_date = ?
         ''', (target_date,))
         total_expenses = cursor.fetchone()[0] or 0.0
+        
+        # حساب باقي ربح اليوم = إجمالي التحصيل - المصاريف
+        remaining_profit = total_collection - total_expenses
         
         conn.close()
         

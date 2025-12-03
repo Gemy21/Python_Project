@@ -67,14 +67,11 @@ class DailyReportsPage:
         # Collection
         self.create_stat_row(stats_frame, "إجمالي التحصيل:", "collection", 0, '#27AE60')
         
-        # Remaining Profit
-        self.create_stat_row(stats_frame, "باقي ربح اليوم:", "remaining", 1, '#3498DB')
-        
         # Expenses
-        self.create_stat_row(stats_frame, "المصاريف:", "expenses", 2, '#E74C3C')
+        self.create_stat_row(stats_frame, "المصاريف:", "expenses", 1, '#E74C3C')
         
-        # Net Profit
-        self.create_stat_row(stats_frame, "صافي الربح:", "net_profit", 3, '#8E44AD')
+        # Remaining Profit
+        self.create_stat_row(stats_frame, "باقي ربح اليوم:", "remaining", 2, '#3498DB')
         
         # Buttons
         btn_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])
@@ -126,20 +123,18 @@ class DailyReportsPage:
         table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Treeview
-        columns = ('date', 'collection', 'remaining', 'expenses', 'net')
+        columns = ('date', 'collection', 'expenses', 'remaining')
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         self.tree.heading('date', text='التاريخ')
         self.tree.heading('collection', text='التحصيل')
-        self.tree.heading('remaining', text='الباقي')
         self.tree.heading('expenses', text='المصاريف')
-        self.tree.heading('net', text='الصافي')
+        self.tree.heading('remaining', text='الباقي')
         
         self.tree.column('date', width=100, anchor='center')
         self.tree.column('collection', width=100, anchor='center')
-        self.tree.column('remaining', width=100, anchor='center')
         self.tree.column('expenses', width=100, anchor='center')
-        self.tree.column('net', width=100, anchor='center')
+        self.tree.column('remaining', width=100, anchor='center')
         
         scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -193,12 +188,9 @@ class DailyReportsPage:
             remaining = totals['remaining_profit']
             expenses = totals['total_expenses']
         
-        net_profit = collection - expenses
-        
         self.collection_label.config(text=f"{collection:,.2f} ج.م")
-        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
         self.expenses_label.config(text=f"{expenses:,.2f} ج.م")
-        self.net_profit_label.config(text=f"{net_profit:,.2f} ج.م")
+        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
     
     def auto_calculate(self):
         target_date = self.date_var.get()
@@ -207,12 +199,10 @@ class DailyReportsPage:
         collection = totals['total_collection']
         remaining = totals['remaining_profit']
         expenses = totals['total_expenses']
-        net_profit = collection - expenses
         
         self.collection_label.config(text=f"{collection:,.2f} ج.م")
-        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
         self.expenses_label.config(text=f"{expenses:,.2f} ج.م")
-        self.net_profit_label.config(text=f"{net_profit:,.2f} ج.م")
+        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
         
         messagebox.showinfo("نجاح", "تم حساب البيانات تلقائياً من المعاملات")
     
@@ -249,31 +239,27 @@ class DailyReportsPage:
         total_collection = 0
         total_remaining = 0
         total_expenses = 0
-        total_net = 0
         
         for report in reports:
             date = report[0]
             collection = report[1]
             remaining = report[2]
             expenses = report[3]
-            net = collection - expenses
             
             self.tree.insert('', tk.END, values=(
                 date,
                 f"{collection:,.2f}",
-                f"{remaining:,.2f}",
                 f"{expenses:,.2f}",
-                f"{net:,.2f}"
+                f"{remaining:,.2f}"
             ))
             
             total_collection += collection
             total_remaining += remaining
             total_expenses += expenses
-            total_net += net
         
         # Update totals
         self.monthly_totals_label.config(
-            text=f"التحصيل: {total_collection:,.2f} | الباقي: {total_remaining:,.2f} | المصاريف: {total_expenses:,.2f} | الصافي: {total_net:,.2f}"
+            text=f"التحصيل: {total_collection:,.2f} | المصاريف: {total_expenses:,.2f} | الباقي: {total_remaining:,.2f}"
         )
         
         if not reports:

@@ -43,8 +43,14 @@ class StartMenu:
         # إنشاء الزراير
         self.create_buttons()
         
+        # حفظ تقرير اليوم السابق تلقائياً عند فتح البرنامج
+        self.auto_save_previous_day_report()
+        
         # ربط تغيير حجم النافذة بتحديث الصورة
         self.root.bind('<Configure>', self.on_window_resize)
+        
+        # ربط حدث إغلاق النافذة بحفظ التقرير
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
     
     def load_background_image(self):
         """تحميل الصورة وتعديل حجمها"""
@@ -215,8 +221,64 @@ class StartMenu:
             icon='question'
         )
         if result:
-            self.root.quit()
-            self.root.destroy()
+            self.on_closing()
+    
+    def auto_save_previous_day_report(self):
+        """حفظ تقرير اليوم السابق تلقائياً عند فتح البرنامج"""
+        from datetime import datetime, timedelta
+        from database import Database
+        
+        try:
+            db = Database()
+            
+            # الحصول على تاريخ اليوم السابق
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            # التحقق من وجود تقرير محفوظ لليوم السابق
+            existing_report = db.get_daily_report(yesterday)
+            
+            if not existing_report:
+                # حساب وحفظ تقرير اليوم السابق
+                totals = db.calculate_daily_totals(yesterday)
+                db.save_daily_report(
+                    yesterday,
+                    totals['total_collection'],
+                    totals['remaining_profit'],
+                    totals['total_expenses']
+                )
+                print(f"تم حفظ تقرير يوم {yesterday} تلقائياً")
+        except Exception as e:
+            print(f"خطأ في حفظ التقرير التلقائي: {e}")
+    
+    def save_today_report(self):
+        """حفظ تقرير اليوم الحالي"""
+        from datetime import datetime
+        from database import Database
+        
+        try:
+            db = Database()
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # حساب وحفظ تقرير اليوم
+            totals = db.calculate_daily_totals(today)
+            db.save_daily_report(
+                today,
+                totals['total_collection'],
+                totals['remaining_profit'],
+                totals['total_expenses']
+            )
+            print(f"تم حفظ تقرير يوم {today}")
+        except Exception as e:
+            print(f"خطأ في حفظ التقرير: {e}")
+    
+    def on_closing(self):
+        """معالجة حدث إغلاق النافذة"""
+        # حفظ تقرير اليوم قبل الإغلاق
+        self.save_today_report()
+        
+        # إغلاق البرنامج
+        self.root.quit()
+        self.root.destroy()
     
     def open_sellers_program(self):
         """فتح برنامج البائعين"""
