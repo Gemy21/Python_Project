@@ -816,8 +816,110 @@ class CurrentAccountPage:
         dialog.bind('<Escape>', lambda e: dialog.destroy())
     
     def edit_meal(self):
-        """فتح نافذة إدارة الوجبات/الأصناف"""
-        MealsManagerWindow(self.window, self.db, self.colors)
+        """تعديل سعر الوجبة/الصنف المحدد"""
+        if not self.selected_trans_id:
+            messagebox.showwarning("تنبيه", "الرجاء تحديد صنف من الجدول لتعديله")
+            return
+            
+        # Get transaction details
+        trans_data = None
+        transactions = self.db.get_seller_transactions(self.seller_id)
+        for t in transactions:
+            if t[0] == self.selected_trans_id:
+                trans_data = t
+                break
+        
+        if not trans_data:
+            return
+            
+        # trans: id, amount, status, count, weight, price, item_name, date, day_name, equipment, note
+        current_price = trans_data[5]
+        item_name = trans_data[6]
+        
+        # Dialog
+        dialog = tk.Toplevel(self.window)
+        dialog.title("تعديل سعر الصنف")
+        dialog.geometry("400x200")
+        bg_color = self.colors.get('window_bg', '#FFB347')
+        dialog.configure(bg=bg_color)
+        
+        # Center
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 200
+        y = (dialog.winfo_screenheight() // 2) - 100
+        dialog.geometry(f"400x200+{x}+{y}")
+        
+        tk.Label(dialog, text=f"تعديل سعر: {item_name}", font=('Playpen Sans Arabic', 14, 'bold'), bg=bg_color).pack(pady=20)
+        
+        frame = tk.Frame(dialog, bg=bg_color)
+        frame.pack()
+        
+        tk.Label(frame, text="السعر الجديد:", font=('Arial', 12, 'bold'), bg=bg_color).pack(side=tk.RIGHT, padx=5)
+        entry_price = tk.Entry(frame, font=('Arial', 14), justify='center', width=10)
+        entry_price.pack(side=tk.RIGHT, padx=5)
+        entry_price.insert(0, str(current_price))
+        entry_price.focus()
+        entry_price.select_range(0, tk.END)
+        
+        def save_price():
+            try:
+                new_price = float(entry_price.get())
+                
+                # Update seller transaction
+                # We need to recalculate amount
+                weight = trans_data[4]
+                count = trans_data[3]
+                new_amount = 0
+                if weight > 0: new_amount = weight * new_price
+                elif count > 0: new_amount = count * new_price
+                
+                # Update DB
+                self.db.update_seller_transaction(
+                    self.selected_trans_id, new_amount, trans_data[2], count, weight, new_price, 
+                    item_name, trans_data[7], trans_data[8], trans_data[9], trans_data[10]
+                )
+                
+                # Check if it's a transfer and update agriculture_transfers
+                note = trans_data[10]
+                if note and "نقلة من العميل" in note:
+                    # Extract client name carefully
+                    # Note format: "نقلة من العميل {client_name}"
+                    client_name = note.replace("نقلة من العميل", "").strip()
+                    
+                    # Update transfers
+                    updated_count = self.db.update_transfer_price(client_name, self.seller_name, item_name, weight, count, new_price)
+                    if updated_count > 0:
+                        print(f"Updated {updated_count} transfer records.")
+                        
+                    # Update Client Debt
+                    # Calculate difference in amount
+                    old_amount = trans_data[1]
+                    diff = new_amount - old_amount
+                    
+                    # Apply difference to client account (negative because it's a credit to client)
+                    self.db.add_client_debt(client_name, -diff)
+                    
+                messagebox.showinfo("نجاح", "تم تعديل السعر بنجاح")
+                dialog.destroy()
+                
+                # Refresh
+                # Clear table
+                for row_entries in self.rows:
+                    for entry in row_entries:
+                        entry.destroy()
+                self.rows = []
+                for widget in self.scrollable_frame.winfo_children():
+                    if int(widget.grid_info()['row']) > 0:
+                        widget.destroy()
+                self.load_data()
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال سعر صحيح")
+
+        tk.Button(dialog, text="حفظ", command=save_price, bg='#27AE60', fg='white', font=('Playpen Sans Arabic', 12, 'bold'), width=10).pack(pady=20)
+        
+        dialog.bind('<Return>', lambda e: save_price())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
     
     def edit_payment(self):
         """فتح نافذة تعديل الدفع"""

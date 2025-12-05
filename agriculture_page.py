@@ -60,29 +60,30 @@ class AgricultureTransferPage:
         price = self.price_var.get()
         
         for row in self.table_rows:
-            # Only update if row is not saved (check if seller name field is editable)
+            # Only update if row is not saved (check if count field is editable)
             try:
-                if row[0]['state'] != 'readonly':  # If seller name is editable, row is not saved
-                    # Update client name (column 1)
+                # New order: 0=Item, 1=Price, 2=Client, 3=Seller, 4=Weight, 5=Count
+                if row[5]['state'] != 'readonly':  # If count is editable, row is not saved
+                    # Update item name (column 0)
+                    row[0].config(state='normal')
+                    row[0].delete(0, tk.END)
+                    if item_name:
+                        row[0].insert(0, item_name)
+                    row[0].config(state='readonly')
+                    
+                    # Update price (column 1)
                     row[1].config(state='normal')
                     row[1].delete(0, tk.END)
-                    if client_name:
-                        row[1].insert(0, client_name)
+                    if price:
+                        row[1].insert(0, price)
                     row[1].config(state='readonly')
                     
-                    # Update item name (column 2)
+                    # Update client name (column 2)
                     row[2].config(state='normal')
                     row[2].delete(0, tk.END)
-                    if item_name:
-                        row[2].insert(0, item_name)
+                    if client_name:
+                        row[2].insert(0, client_name)
                     row[2].config(state='readonly')
-                    
-                    # Update price (column 3)
-                    row[3].config(state='normal')
-                    row[3].delete(0, tk.END)
-                    if price:
-                        row[3].insert(0, price)
-                    row[3].config(state='readonly')
             except:
                 pass
 
@@ -125,7 +126,7 @@ class AgricultureTransferPage:
         
         tk.Label(price_frame, text="السعر:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
-        # Client (Center) - swapped with Item
+        # Client (Center)
         client_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
         client_frame.pack(side=tk.RIGHT, padx=10)
         
@@ -138,9 +139,9 @@ class AgricultureTransferPage:
         self.client_combo.bind('<Return>', self.on_client_enter)
         self.client_combo.focus()
         
-        tk.Label(client_frame, text="اسم العميل:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Label(client_frame, text="اسم النقلة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
-        # Item (Right) - swapped with Client
+        # Item (Right)
         item_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
         item_frame.pack(side=tk.RIGHT, padx=10)
         
@@ -172,9 +173,9 @@ class AgricultureTransferPage:
         self.price_entry.focus()
         
     def on_price_enter(self, event=None):
-        """When Enter is pressed in price field, move to first row"""
+        """When Enter is pressed in price field, move to first row - Count field"""
         if self.table_rows:
-            self.table_rows[0][0].focus()
+            self.table_rows[0][5].focus()  # Focus on Count field (first to input)
 
     def create_table(self, parent):
         table_frame = tk.Frame(parent, bg=self.colors['bg'])
@@ -194,7 +195,8 @@ class AgricultureTransferPage:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        headers = ['اسم البائع', 'اسم العميل', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد']
+        # Order (Right to Left): Item, Price, Client, Seller, Weight, Count
+        headers = ['الصنف', 'سعر الكيلو', 'اسم النقلة', 'اسم البائع', 'الوزن', 'العدد']
         
         for i, text in enumerate(headers):
             lbl = tk.Label(self.scrollable_frame, text=text, font=self.fonts['table'],
@@ -220,50 +222,52 @@ class AgricultureTransferPage:
         for col_idx in range(6):
             e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
             
-            # Pre-fill client name, item, and price
-            if col_idx == 1:  # Client name
-                shipment_val = self.shipment_var.get()
-                if shipment_val:
-                    e.insert(0, shipment_val)
-                    e.config(state='readonly')
-            elif col_idx == 2:  # Item name
+            # Pre-fill item, price, and client name
+            # Order: 0=Item, 1=Price, 2=Client, 3=Seller, 4=Weight, 5=Count
+            if col_idx == 0:  # Item name
                 item_val = self.item_var.get()
                 if item_val:
                     e.insert(0, item_val)
                     e.config(state='readonly')
-            elif col_idx == 3:  # Price
+            elif col_idx == 1:  # Price
                 price_val = self.price_var.get()
                 if price_val:
                     e.insert(0, price_val)
+                    e.config(state='readonly')
+            elif col_idx == 2:  # Client name
+                shipment_val = self.shipment_var.get()
+                if shipment_val:
+                    e.insert(0, shipment_val)
                     e.config(state='readonly')
             
             e.grid(row=row_num, column=col_idx, sticky='nsew', padx=2, pady=2, ipady=15)
             
             # Bind Enter key to move to next field or save
-            if col_idx == 0:  # Seller name
+            # Input Order: Count -> Weight -> Seller
+            if col_idx == 5:  # Count (first to input)
                 e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_weight(idx))
-            elif col_idx == 4:  # Weight
-                e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_count(idx))
-            elif col_idx == 5:  # Count
+            elif col_idx == 4:  # Weight (second to input)
+                e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_seller(idx))
+            elif col_idx == 3:  # Seller name (last to input)
                 e.bind('<Return>', lambda ev, idx=row_num-1: self.save_current_row(idx))
             
             row_widgets.append(e)
         
         self.table_rows.append(row_widgets)
         
-        # Focus on seller name field
+        # Focus on count field (first to input)
         if row_widgets:
-            row_widgets[0].focus()
+            row_widgets[5].focus()  # Focus on Count (index 5)
 
     def move_to_weight(self, row_idx):
         """Move focus to weight field"""
         if row_idx < len(self.table_rows):
             self.table_rows[row_idx][4].focus()
     
-    def move_to_count(self, row_idx):
-        """Move focus to count field"""
+    def move_to_seller(self, row_idx):
+        """Move focus to seller name field"""
         if row_idx < len(self.table_rows):
-            self.table_rows[row_idx][5].focus()
+            self.table_rows[row_idx][3].focus()
 
     def save_current_row(self, row_idx):
         """Save the current row and create a new one"""
@@ -275,13 +279,14 @@ class AgricultureTransferPage:
         client_name = self.shipment_var.get().strip()
         item_name_input = self.item_var.get().strip()
         unit_price_str = self.price_var.get().strip()
-        seller_name_input = row[0].get().strip()
+        # Order: 3=Seller, 4=Weight, 5=Count
+        seller_name_input = row[3].get().strip()
         weight_str = row[4].get().strip()
         count_str = row[5].get().strip()
         
         # Validation
         if not client_name:
-            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم العميل أولاً")
+            messagebox.showwarning("تنبيه", "الرجاء إدخال اسم النقلة أولاً")
             self.client_combo.focus()
             return
             
@@ -292,7 +297,7 @@ class AgricultureTransferPage:
         
         if not seller_name_input:
             messagebox.showwarning("تنبيه", "الرجاء إدخال اسم البائع")
-            row[0].focus()
+            row[3].focus()
             return
         
         try:
@@ -301,7 +306,7 @@ class AgricultureTransferPage:
             
             if weight == 0 and count == 0:
                 messagebox.showwarning("تنبيه", "الرجاء إدخال الوزن أو العدد")
-                row[4].focus()
+                row[5].focus()  # Focus on Count
                 return
             
             unit_price = float(unit_price_str) if unit_price_str else 0.0

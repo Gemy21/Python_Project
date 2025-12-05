@@ -588,20 +588,12 @@ class ClientsPage:
         btn_frame.pack(fill=tk.X)
         
         def create_invoice_from_transfer():
-            """إنشاء فاتورة من النقلة المحددة مع إدخال الخصومات"""
-            if not selected_transfer['id']:
-                messagebox.showwarning("تنبيه", "الرجاء تحديد نقلة أولاً")
-                return
+            """إنشاء فاتورة لكل النقلات غير المفوترة للعميل"""
+            # Get all uninvoiced transfers for this client
+            uninvoiced_transfers = self.db.get_uninvoiced_transfers(client_name)
             
-            # Get transfer data
-            transfer_data = None
-            for t in client_transfers:
-                if t[0] == selected_transfer['id']:
-                    transfer_data = t
-                    break
-            
-            if not transfer_data:
-                messagebox.showerror("خطأ", "لم يتم العثور على النقلة")
+            if not uninvoiced_transfers:
+                messagebox.showwarning("تنبيه", "لا توجد نقلات غير مفوترة لهذا العميل")
                 return
             
             # Open Dialog to enter deductions
@@ -616,7 +608,7 @@ class ClientsPage:
             y = (dialog.winfo_screenheight() // 2) - 225
             dialog.geometry(f"500x450+{x}+{y}")
             
-            tk.Label(dialog, text="إدخال بيانات الفاتورة", font=('Playpen Sans Arabic', 16, 'bold'), bg=self.colors['bg']).pack(pady=15)
+            tk.Label(dialog, text=f"إنشاء فاتورة لـ {len(uninvoiced_transfers)} نقلة", font=('Playpen Sans Arabic', 16, 'bold'), bg=self.colors['bg']).pack(pady=15)
             
             form_frame = tk.Frame(dialog, bg=self.colors['bg'])
             form_frame.pack(pady=10, padx=20, fill=tk.X)
@@ -669,27 +661,11 @@ class ClientsPage:
                     
                     dialog.destroy()
                     
-                    # Prepare data for invoice page
-                    owner = transfer_data[1]  # client name
-                    count = transfer_data[6]
-                    weight = transfer_data[5]
-                    item = transfer_data[3]
-                    price = transfer_data[4]
-                    equipment = transfer_data[7] if len(transfer_data) > 7 else ""
+                    # Prepare data for invoice page (pass list of transfers)
+                    # Each transfer: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type
                     
-                    # Calculate net
-                    net = 0
-                    if weight > 0:
-                        net = weight * price
-                    elif count > 0:
-                        net = count * price
-                    
-                    date = datetime.now().strftime("%Y-%m-%d")
-                    
-                    invoice_data = (owner, count, weight, item, price, f"{net:.2f}", date, equipment)
-                    
-                    # Open invoice page with deductions
-                    ReadyInvoicesPage(transfers_window, transfer_data=invoice_data, deductions=deductions)
+                    # Open invoice page with deductions and list of transfers
+                    ReadyInvoicesPage(transfers_window, transfer_data=uninvoiced_transfers, deductions=deductions, is_multi=True)
                     
                 except Exception as e:
                     messagebox.showerror("خطأ", f"حدث خطأ: {e}")
@@ -700,5 +676,119 @@ class ClientsPage:
             tk.Button(btn_frame, text="موافق", command=confirm, font=self.fonts['button'], bg='#27AE60', fg='white', width=15).pack(side=tk.RIGHT, padx=10)
             tk.Button(btn_frame, text="إلغاء", command=dialog.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.LEFT, padx=10)
         
-        tk.Button(btn_frame, text="إنشاء فاتورة", command=create_invoice_from_transfer, font=self.fonts['button'], bg='#27AE60', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
+        def show_invoices():
+            """عرض الفواتير السابقة للعميل"""
+            invoices_window = tk.Toplevel(transfers_window)
+            invoices_window.title(f"فواتير العميل: {client_name}")
+            invoices_window.geometry("1000x600")
+            invoices_window.configure(bg=self.colors['bg'])
+            
+            # Title
+            tk.Label(invoices_window, text=f"سجل فواتير العميل: {client_name}", font=self.fonts['header'], bg=self.colors['bg']).pack(pady=15)
+            
+            # List Frame
+            list_frame = tk.Frame(invoices_window, bg=self.colors['bg'])
+            list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            
+            # Treeview
+            cols = ('id', 'date', 'total', 'net', 'deductions')
+            tree = ttk.Treeview(list_frame, columns=cols, show='headings', height=15)
+            
+            tree.heading('id', text='رقم الفاتورة')
+            tree.heading('date', text='التاريخ')
+            tree.heading('total', text='الصافي النهائي')
+            tree.heading('net', text='إجمالي البضاعة')
+            tree.heading('deductions', text='الخصومات')
+            
+            tree.column('id', anchor='center', width=100)
+            tree.column('date', anchor='center', width=150)
+            tree.column('total', anchor='center', width=150)
+            tree.column('net', anchor='center', width=150)
+            tree.column('deductions', anchor='center', width=150)
+            
+            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            tree.configure(yscrollcommand=scrollbar.set)
+            
+            def load_invoices():
+                for item in tree.get_children():
+                    tree.delete(item)
+                
+                invoices = self.db.get_client_invoices(client_name)
+                for inv in invoices:
+                    # id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total
+                    inv_id = inv[0]
+                    date = inv[7]
+                    net = inv[8] or 0
+                    final = inv[9] or 0
+                    
+                    # Calculate total deductions
+                    nolon = inv[2] or 0
+                    # Commission might be string with %
+                    comm_str = str(inv[3])
+                    if '%' in comm_str:
+                        comm_pct = float(comm_str.replace('%', '').strip())
+                        commission = (net * comm_pct) / 100
+                    else:
+                        commission = float(comm_str)
+                    
+                    mashal = inv[4] or 0
+                    rent = inv[5] or 0
+                    cash = inv[6] or 0
+                    
+                    deductions = nolon + commission + mashal + rent + cash
+                    
+                    tree.insert('', tk.END, values=(inv_id, date, f"{final:.2f}", f"{net:.2f}", f"{deductions:.2f}"), iid=inv_id)
+            
+            load_invoices()
+            
+            def open_selected_invoice():
+                selected = tree.selection()
+                if not selected:
+                    messagebox.showwarning("تنبيه", "الرجاء اختيار فاتورة")
+                    return
+                
+                invoice_id = int(selected[0])
+                
+                # Get invoice details
+                invoices = self.db.get_client_invoices(client_name)
+                selected_inv = None
+                for inv in invoices:
+                    if inv[0] == invoice_id:
+                        selected_inv = inv
+                        break
+                
+                if not selected_inv:
+                    return
+
+                # Get linked transfers
+                transfers = self.db.get_transfers_by_invoice_id(invoice_id)
+                
+                if not transfers:
+                    messagebox.showwarning("تنبيه", "لا توجد نقلات مرتبطة بهذه الفاتورة")
+                    return
+                
+                # Prepare deductions dict
+                deductions = {
+                    'nolon': str(selected_inv[2]),
+                    'commission': str(selected_inv[3]),
+                    'mashal': str(selected_inv[4]),
+                    'rent': str(selected_inv[5]),
+                    'cash': str(selected_inv[6])
+                }
+                
+                # Open ReadyInvoicesPage
+                ReadyInvoicesPage(invoices_window, transfer_data=transfers, deductions=deductions, is_multi=True, invoice_id=invoice_id)
+
+            # Buttons
+            btn_frame = tk.Frame(invoices_window, bg=self.colors['bg'], pady=10)
+            btn_frame.pack(fill=tk.X)
+            
+            tk.Button(btn_frame, text="عرض / تعديل الفاتورة", command=open_selected_invoice, font=self.fonts['button'], bg='#3498DB', fg='white', width=20).pack(side=tk.TOP, pady=5)
+            tk.Button(btn_frame, text="إغلاق", command=invoices_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.BOTTOM, pady=5)
+
+        tk.Button(btn_frame, text="عرض الفواتير السابقة", command=show_invoices, font=self.fonts['button'], bg='#3498DB', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
+        tk.Button(btn_frame, text="إنشاء فاتورة مجمعة", command=create_invoice_from_transfer, font=self.fonts['button'], bg='#27AE60', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
         tk.Button(btn_frame, text="إغلاق", command=transfers_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=18, height=2).pack(side=tk.LEFT, padx=10)

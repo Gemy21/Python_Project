@@ -746,15 +746,15 @@ class Database:
         conn.close()
         return invoice_id
 
-    def update_client_invoice(self, invoice_id, owner_name, nolon, commission, mashal, rent, cash, invoice_date):
+    def update_client_invoice(self, invoice_id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount=0, final_total=0):
         """تحديث فاتورة عميل"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
             UPDATE client_invoices 
-            SET owner_name=?, nolon=?, commission=?, mashal=?, rent=?, cash=?, invoice_date=?, updated_at=CURRENT_TIMESTAMP
+            SET owner_name=?, nolon=?, commission=?, mashal=?, rent=?, cash=?, invoice_date=?, net_amount=?, final_total=?, updated_at=CURRENT_TIMESTAMP
             WHERE id=?
-        ''', (owner_name, nolon, commission, mashal, rent, cash, invoice_date, invoice_id))
+        ''', (owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total, invoice_id))
         conn.commit()
         conn.close()
 
@@ -763,6 +763,20 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT id, owner_name, nolon, commission, mashal, rent, cash, invoice_date FROM client_invoices ORDER BY id DESC LIMIT 1')
+        result = cursor.fetchone()
+        conn.close()
+        return result
+    
+    def get_latest_invoice_by_client(self, owner_name):
+        """جلب آخر فاتورة لعميل/نقلة معينة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total 
+            FROM client_invoices 
+            WHERE owner_name = ? 
+            ORDER BY id DESC LIMIT 1
+        ''', (owner_name,))
         result = cursor.fetchone()
         conn.close()
         return result
@@ -789,8 +803,7 @@ class Database:
             # إضافة تقرير جديد
             cursor.execute('''
                 INSERT INTO daily_reports (report_date, total_collection, remaining_profit, total_expenses)
-                VALUES (?, ?, ?, ?)
-            ''', (report_date, total_collection, remaining_profit, total_expenses))
+                VALUES (?, ?, ?, ?)\n            ''', (report_date, total_collection, remaining_profit, total_expenses))
         
         conn.commit()
         conn.close()
@@ -807,6 +820,7 @@ class Database:
         result = cursor.fetchone()
         conn.close()
         return result
+
 
     def get_monthly_reports(self, year, month):
         """جلب تقارير شهر محدد"""
@@ -846,7 +860,7 @@ class Database:
         ''', (target_date,))
         total_expenses = cursor.fetchone()[0] or 0.0
         
-        # حساب باقي ربح اليوم = إجمالي التحصيل - المصاريف
+        # حساب صافي ربح اليوم = إجمالي التحصيل - المصاريف
         remaining_profit = total_collection - total_expenses
         
         conn.close()
@@ -857,3 +871,97 @@ class Database:
             'total_expenses': total_expenses
         }
 
+    # --- طرق التعامل مع الفواتير المجمعة ---
+
+    def get_uninvoiced_transfers(self, client_name):
+        """جلب النقلات التي لم يتم عمل فاتورة لها لعميل معين"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Ensure invoice_id column exists
+        try:
+            cursor.execute('ALTER TABLE agriculture_transfers ADD COLUMN invoice_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
+            
+        cursor.execute('''
+            SELECT id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type 
+            FROM agriculture_transfers 
+            WHERE shipment_name = ? AND transfer_type = 'in' AND (invoice_id IS NULL OR invoice_id = 0)
+            ORDER BY created_at
+        ''', (client_name,))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def link_transfers_to_invoice(self, invoice_id, transfer_ids):
+        """ربط النقلات بفاتورة معينة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Ensure invoice_id column exists
+        try:
+            cursor.execute('ALTER TABLE agriculture_transfers ADD COLUMN invoice_id INTEGER')
+        except sqlite3.OperationalError:
+            pass
+            
+        placeholders = ','.join(['?'] * len(transfer_ids))
+        query = f'UPDATE agriculture_transfers SET invoice_id = ? WHERE id IN ({placeholders})'
+        cursor.execute(query, [invoice_id] + transfer_ids)
+        
+        conn.commit()
+        conn.close()
+
+    def get_client_invoices(self, client_name):
+        """جلب جميع فواتير عميل معين"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total 
+            FROM client_invoices 
+            WHERE owner_name = ? 
+            ORDER BY invoice_date DESC, id DESC
+        ''', (client_name,))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+    def get_transfers_by_invoice_id(self, invoice_id):
+        """جلب النقلات المرتبطة بفاتورة معينة"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type 
+            FROM agriculture_transfers 
+            WHERE invoice_id = ?
+            ORDER BY created_at
+        ''', (invoice_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return results
+
+
+    def update_transfer_price(self, client_name, seller_name, item_name, weight, count, new_price):
+        """تحديث سعر النقلة في جدول ترحيل الزراعة (للبائع والعميل)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            # تحديث السعر في السجلات التي تطابق المواصفات (سواء كانت in أو out)
+            cursor.execute('''
+                UPDATE agriculture_transfers 
+                SET unit_price = ? 
+                WHERE shipment_name = ? 
+                AND seller_name = ? 
+                AND item_name = ? 
+                AND weight = ? 
+                AND count = ?
+            ''', (new_price, client_name, seller_name, item_name, weight, count))
+            
+            rows_affected = cursor.rowcount
+            conn.commit()
+            return rows_affected
+        except Exception as e:
+            print(f"Error updating transfer price: {e}")
+            return 0
+        finally:
+            conn.close()

@@ -71,7 +71,7 @@ class DailyReportsPage:
         self.create_stat_row(stats_frame, "المصاريف:", "expenses", 1, '#E74C3C')
         
         # Remaining Profit
-        self.create_stat_row(stats_frame, "باقي ربح اليوم:", "remaining", 2, '#3498DB')
+        self.create_stat_row(stats_frame, "صافي ربح اليوم:", "remaining", 2, '#3498DB')
         
         # Buttons
         btn_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])

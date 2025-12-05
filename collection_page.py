@@ -91,7 +91,7 @@ class CollectionPage:
         # Remaining Profit Card (Left)
         self.create_stat_card(
             stats_frame, 
-            "باقي ربح اليوم", 
+            "صافي ربح اليوم", 
             f"{remaining_profit:,.2f}", 
             '#3498DB',
             tk.LEFT

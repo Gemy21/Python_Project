@@ -553,7 +553,7 @@ class StartMenu:
             font=('Playpen Sans Arabic', 11, 'bold'), 
             width=12,
             relief=tk.FLAT,
-            cursor='hand2',
+            cursذr='hand2',
             height=1
         ).pack(side=tk.RIGHT, padx=5)
         
