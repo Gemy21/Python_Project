@@ -112,14 +112,14 @@ class ReadyInvoicesPage:
             lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
             table_frame.grid_columnconfigure(i, weight=1)
             
-        # Process Data
+        # Process Data - Grouping by Item and Price
         self.total_net_amount = 0
-        self.processed_transactions = []
+        grouped_transactions = {} # Key: (item_name, price)
         
         if self.transfer_data:
             data_list = self.transfer_data if self.is_multi else [self.transfer_data]
             
-            for idx, item_data in enumerate(data_list):
+            for item_data in data_list:
                 if self.is_multi:
                     # item_data: (id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type)
                     t_id = item_data[0]
@@ -134,19 +134,39 @@ class ReadyInvoicesPage:
                     
                     self.total_net_amount += net
                     
-                    self.processed_transactions.append({
-                        'id': t_id, 'item': item, 'weight': weight, 'count': count, 'price': price, 'amount': net, 'type': 'بضاعة'
-                    })
+                    key = (item, price)
+                    if key in grouped_transactions:
+                        grouped_transactions[key]['weight'] += weight
+                        grouped_transactions[key]['count'] += count
+                        grouped_transactions[key]['amount'] += net
+                    else:
+                        grouped_transactions[key] = {
+                            'item': item, 'price': price, 'weight': weight, 'count': count, 'amount': net, 'type': 'بضاعة'
+                        }
                 else:
-                    # Legacy
+                    # Legacy/Single transfer data handling
                     vals = list(item_data)
                     try:
-                        net = float(vals[5])
+                        item = vals[3]
+                        price = float(vals[4]) or 0
+                        weight = float(vals[2]) or 0
+                        count = float(vals[1]) or 0
+                        net = float(vals[5]) or 0
+                        
                         self.total_net_amount += net
-                        self.processed_transactions.append({
-                            'id': None, 'item': vals[3], 'weight': float(vals[2]) or 0, 'count': float(vals[1]) or 0, 'price': float(vals[4]) or 0, 'amount': net, 'type': 'بضاعة'
-                        })
+                        key = (item, price)
+                        if key in grouped_transactions:
+                            grouped_transactions[key]['weight'] += weight
+                            grouped_transactions[key]['count'] += count
+                            grouped_transactions[key]['amount'] += net
+                        else:
+                            grouped_transactions[key] = {
+                                'item': item, 'price': price, 'weight': weight, 'count': count, 'amount': net, 'type': 'بضاعة'
+                            }
                     except: pass
+        
+        # Convert grouped dictionary to list for display
+        self.processed_transactions = list(grouped_transactions.values())
         
         # Display Rows
         for idx, trans in enumerate(self.processed_transactions, start=1):
@@ -210,33 +230,59 @@ class ReadyInvoicesPage:
             self.deduction_entries[key] = entry
 
         # === Totals Section ===
-        totals_frame = tk.Frame(self.scrollable_frame, bg='#F4F6F7', relief=tk.SOLID, bd=2, pady=15)
-        totals_frame.pack(fill=tk.X, padx=50, pady=10)
+        totals_frame = tk.Frame(self.scrollable_frame, bg='#FDF2E9', relief=tk.RAISED, bd=2, pady=15)
+        totals_frame.pack(fill=tk.X, padx=50, pady=20)
         
-        def add_total_row(label, var_name, color):
-            row = tk.Frame(totals_frame, bg=totals_frame['bg'])
+        def add_total_row(label, var_name, color, bg_color):
+            row = tk.Frame(totals_frame, bg='#FDF2E9')
             row.pack(fill=tk.X, pady=5, padx=20)
             
-            val_lbl = tk.Label(row, text="0.00", font=('Arial', 16, 'bold'), bg=color, width=15, relief=tk.SOLID, bd=1)
+            val_lbl = tk.Label(row, text="0", font=('Arial', 18, 'bold'), bg=bg_color, fg=color, width=15, relief=tk.SOLID, bd=1)
             val_lbl.pack(side=tk.LEFT)
             setattr(self, var_name, val_lbl)
             
-            tk.Label(row, text=label, font=('Simplified Arabic', 14, 'bold'), bg=totals_frame['bg']).pack(side=tk.LEFT, padx=10)
+            tk.Label(row, text=label, font=('Simplified Arabic', 16, 'bold'), bg='#FDF2E9', fg='#2C3E50').pack(side=tk.LEFT, padx=10)
             
-        add_total_row("إجمالي البضاعة:", "lbl_total_goods", '#FFF3CD')
-        add_total_row("إجمالي الخصومات:", "lbl_total_deductions", '#F8D7DA')
-        add_total_row("الصافي النهائي:", "lbl_final_total", '#D4EDDA')
+        add_total_row("إجمالي قيمة البضاعة:", "lbl_total_goods", '#2980B9', '#EBF5FB')
+        add_total_row("إجمالي الخصومات والمصاريف:", "lbl_total_deductions", '#C0392B', '#FDEDEC')
+        add_total_row("الصافي النهائي المطلوب:", "lbl_final_total", '#27AE60', '#EAFAF1')
         
         # Initial Calculation
         self.update_totals()
         
         # === Action Buttons (Fixed at Bottom of Window) ===
-        btn_frame = tk.Frame(self.window, bg='#BDC3C7', pady=10)
+        btn_frame = tk.Frame(self.window, bg='#2C3E50', pady=15)
         btn_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
-        tk.Button(btn_frame, text="حفظ وطباعة", command=self.save_and_print, font=self.fonts['button'], bg='#E74C3C', fg='white', width=20, height=2).pack(side=tk.RIGHT, padx=20)
-        tk.Button(btn_frame, text="حفظ فقط", command=self.save_only, font=self.fonts['button'], bg='#27AE60', fg='white', width=20, height=2).pack(side=tk.RIGHT, padx=10)
-        tk.Button(btn_frame, text="إغلاق", command=self.window.destroy, font=self.fonts['button'], bg='#7F8C8D', fg='white', width=15, height=2).pack(side=tk.LEFT, padx=20)
+        # Main Print Button (Does Save + Print)
+        print_btn = tk.Button(
+            btn_frame, 
+            text="🖨️ طباعة الفاتورة والمعاينة", 
+            command=self.save_and_print, 
+            font=('Simplified Arabic', 16, 'bold'), 
+            bg='#27AE60', 
+            fg='white', 
+            width=25, 
+            height=2,
+            cursor='hand2',
+            relief=tk.RAISED,
+            bd=3
+        )
+        print_btn.pack(side=tk.RIGHT, padx=50)
+        
+        # Close Button
+        close_btn = tk.Button(
+            btn_frame, 
+            text="إغلاق", 
+            command=self.window.destroy, 
+            font=('Simplified Arabic', 14, 'bold'), 
+            bg='#E74C3C', 
+            fg='white', 
+            width=15, 
+            height=2,
+            cursor='hand2'
+        )
+        close_btn.pack(side=tk.LEFT, padx=50)
 
     def update_totals(self, event=None):
         try:
@@ -277,9 +323,9 @@ class ReadyInvoicesPage:
             final_total = total_goods - total_deductions
             
             # Update Labels
-            self.lbl_total_goods.config(text=f"{total_goods:.2f} جنيه")
-            self.lbl_total_deductions.config(text=f"{total_deductions:.2f} جنيه")
-            self.lbl_final_total.config(text=f"{final_total:.2f} جنيه")
+            self.lbl_total_goods.config(text=f"{format_clean_number(total_goods)} جنيه")
+            self.lbl_total_deductions.config(text=f"{format_clean_number(total_deductions)} جنيه")
+            self.lbl_final_total.config(text=f"{format_clean_number(final_total)} جنيه")
             
             # Store values for saving
             self.current_values = {

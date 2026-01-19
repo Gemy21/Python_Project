@@ -109,10 +109,10 @@ class AgricultureTransferPage:
         date_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
         date_frame.pack(side=tk.LEFT, padx=10)
         
-        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y/%m/%d"))
+        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
         date_entry = make_entry(date_frame, self.date_var, width=12)
         date_entry.pack(side=tk.LEFT, padx=5)
-        date_entry.config(state='readonly', bg='#E8F8F5')
+        date_entry.config(state='normal', bg='white')
         
         tk.Label(date_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
@@ -306,7 +306,17 @@ class AgricultureTransferPage:
         
         row = self.table_rows[row_idx]
         
-        client_name = self.shipment_var.get().strip()
+        client_name_input = self.shipment_var.get().strip()
+        manual_date = self.date_var.get().strip()
+        if not manual_date:
+            manual_date = datetime.now().strftime("%Y-%m-%d")
+            
+        # Append date to shipment name for better grouping/invoicing
+        if client_name_input and manual_date not in client_name_input:
+            client_name = f"{client_name_input} - {manual_date}"
+        else:
+            client_name = client_name_input
+            
         item_name_input = self.item_var.get().strip()
         unit_price_str = self.price_var.get().strip()
         # Order: 3=Seller, 4=Weight, 5=Count
@@ -363,8 +373,8 @@ class AgricultureTransferPage:
             elif count > 0:
                 amount = count * unit_price
             
-            # 1. Client Action (Credit)
-            self.db.add_client_debt(client_name, -amount)
+            # 1. Client Action (Credit) - Use raw name for the account balance
+            self.db.add_client_debt(client_name_input, -amount)
             
             # Record 'in' transfer for Client
             self.db.add_agriculture_transfer(client_name, seller_name_input, final_item_name, 
@@ -384,10 +394,11 @@ class AgricultureTransferPage:
             
             # Add Transaction to Seller Account
             note = f"نقلة من العميل {client_name}"
-            today_date = datetime.now().strftime("%Y-%m-%d")
+            # Use the manual date entered by the user
+            transaction_date = manual_date
             
             self.db.add_seller_transaction(seller_id, amount, "متبقي", count, weight, unit_price,
-                                          final_item_name, today_date, "", "", note)
+                                          final_item_name, transaction_date, "", "", note)
             
             # Make current row readonly
             for widget in row:

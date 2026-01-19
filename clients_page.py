@@ -857,40 +857,77 @@ class ClientsPage:
             messagebox.showerror("خطأ", "لم يتم العثور على النقلة")
             return
             
-        client_name = selected_transfer[1]
-        created_at = selected_transfer[9]
-        if not created_at:
-            messagebox.showwarning("تنبيه", "النقلة المختارة لا تحتوي على تاريخ")
-            return
-            
-        target_date = created_at.split(' ')[0]
+        # اسم النقلة المختار (الذي يحتوي على اسم العميل والتاريخ مدمجين)
+        shipment_full_name = selected_transfer[1]
         
-        # جلب كل نقلات العميل في نفس التاريخ
+        # جلب كل نقلات العميل التي لها نفس اسم النقلة بالضبط
         all_transfers = self.db.get_agriculture_transfers()
-        daily_transfers = [t for t in all_transfers if t[1] == client_name and t[8] == 'in' and t[9] and t[9].startswith(target_date)]
+        daily_transfers = [t for t in all_transfers if t[1] == shipment_full_name and t[8] == 'in']
         
         if not daily_transfers:
-            messagebox.showinfo("تنبيه", f"لا توجد نقلات مسجلة للعميل {client_name} في تاريخ {target_date}")
+            messagebox.showinfo("تنبيه", f"لم يتم العثور على نقلات أخرى لـ {shipment_full_name}")
             return
 
-        # سؤال المستخدم عن الخصومات قبل إنشاء الفاتورة (Nolon, Commission, etc.)
-        self.ask_for_invoice_deductions(client_name, target_date, daily_transfers)
+        # فتح نافذة مراجعة النقلات المشتركة أولاً
+        self.open_shared_transfers_review_window(shipment_full_name, daily_transfers)
 
-    def ask_for_invoice_deductions(self, client_name, date_str, transfers):
-        """نافذة صغيرة لإدخال الخصومات قبل فتح صفحة الفاتورة"""
-        dialog = tk.Toplevel(self.window)
-        dialog.title("بيانات الفاتورة المجمعة")
-        dialog.geometry("500x450")
+    def open_shared_transfers_review_window(self, shipment_name, transfers):
+        """نافذة مراجعة النقلات قبل إنشاء الفاتورة"""
+        review_win = tk.Toplevel(self.window)
+        review_win.title(f"مراجعة نقلات: {shipment_name}")
+        review_win.geometry("1100x600")
+        review_win.configure(bg=self.colors['bg'])
+
+        tk.Label(review_win, text=f"نقلات: {shipment_name}", font=self.fonts['header'], bg=self.colors['bg']).pack(pady=10)
+
+        # جدول مراجعة (يشبه الجدول الرئيسي)
+        table_frame = tk.Frame(review_win, bg='white')
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        # Headers
+        headers = ['البائع', 'الصنف', 'العدد', 'الوزن', 'سعر الوحدة', 'الإجمالي']
+        for i, h in enumerate(headers):
+            tk.Label(table_frame, text=h, font=self.fonts['label'], bg=self.colors['button_bg'], fg='white', relief=tk.RAISED, pady=5).grid(row=0, column=i, sticky='ew')
+            table_frame.grid_columnconfigure(i, weight=1)
+
+        # Data rows
+        total_amount = 0
+        for idx, t in enumerate(transfers):
+            # transfer: id, shipment, seller, item, price, weight, count, equip, type, date
+            row_bg = "white" if idx % 2 == 0 else "#FDF2E9"
+            price = t[4] or 0
+            weight = t[5] or 0
+            count = t[6] or 0
+            amount = (weight * price) if weight > 0 else (count * price)
+            total_amount += amount
+
+            vals = [t[2], t[3], format_clean_number(count), format_clean_number(weight), format_clean_number(price), format_clean_number(amount)]
+            for col_i, val in enumerate(vals):
+                tk.Label(table_frame, text=str(val), font=('Arial', 11), bg=row_bg, relief=tk.SOLID, bd=1, pady=5).grid(row=idx+1, column=col_i, sticky='ew')
+
+        # Total Label
+        tk.Label(review_win, text=f"إجمالي قيمة البضاعة: {format_clean_number(total_amount)} جنيه", font=self.fonts['label'], bg='#F1C40F').pack(pady=5)
+
+        # Action Button
+        def start_invoice_process():
+            self.ask_for_invoice_deductions_from_review(shipment_name, transfers, review_win)
+
+        tk.Button(review_win, text="إنشاء فاتورة مجمعة لهذه النقلات", command=start_invoice_process, 
+                 font=self.fonts['button'], bg='#27AE60', fg='white', width=30, height=2).pack(pady=15)
+
+    def ask_for_invoice_deductions_from_review(self, shipment_name, transfers, parent_win):
+        """طلب الخصومات ثم فتح المعاينة"""
+        dialog = tk.Toplevel(parent_win)
+        dialog.title("إدخال خصومات الفاتورة")
+        dialog.geometry("500x480")
         dialog.configure(bg=self.colors['bg'])
         
-        # Center dialog
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - 250
-        y = (dialog.winfo_screenheight() // 2) - 225
-        dialog.geometry(f"500x450+{x}+{y}")
-        
-        tk.Label(dialog, text=f"إنشاء فاتورة لـ {client_name}\nبتاريخ: {date_str}\n(عدد النقلات: {len(transfers)})", 
-                font=('Playpen Sans Arabic', 14, 'bold'), bg=self.colors['bg']).pack(pady=15)
+        y = (dialog.winfo_screenheight() // 2) - 240
+        dialog.geometry(f"500x480+{x}+{y}")
+
+        tk.Label(dialog, text="إدخال بيانات الخصم لـ\n" + shipment_name, font=self.fonts['label'], bg=self.colors['bg']).pack(pady=15)
         
         form_frame = tk.Frame(dialog, bg=self.colors['bg'])
         form_frame.pack(pady=10, padx=20, fill=tk.X)
@@ -920,11 +957,11 @@ class ClientsPage:
                 'cash': entries['cash'].get().strip() or "0"
             }
             dialog.destroy()
-            # فتح صفحة الفاتورة الجاهزة
-            ReadyInvoicesPage(self.window, transfer_data=transfers, deductions=deductions, is_multi=True)
+            # فتح صفحة المعاينة النهائية والطباعة
+            ReadyInvoicesPage(parent_win, transfer_data=transfers, deductions=deductions, is_multi=True)
 
-        tk.Button(dialog, text="تأكيد وإنشاء الفاتورة", command=confirm, 
-                 font=self.fonts['button'], bg='#27AE60', fg='white', width=20).pack(pady=20)
+        tk.Button(dialog, text="تأكيد ومعاينة الفاتورة", command=confirm, 
+                 font=self.fonts['button'], bg='#27AE60', fg='white', width=20, height=2).pack(pady=20)
 
     def show_added_invoices(self):
         """عرض سجل الفواتير التي تم حفظها مسبقاً"""
