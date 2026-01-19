@@ -1,268 +1,192 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from database import Database
-from datetime import datetime, timedelta
-import calendar
+from datetime import datetime
 from utils import format_clean_number
 
 class DailyReportsPage:
-    def __init__(self, parent_window):
+    def __init__(self, parent):
+        self.parent = parent
         self.db = Database()
         
-        self.colors = {
-            'bg': '#FFB347',
-            'header_bg': '#6C3483',
-            'card_bg': 'white',
-            'button_bg': '#800000',
-            'button_fg': 'white'
-        }
+        self.window = tk.Toplevel(parent)
+        self.window.title("التقارير والإحصائيات")
+        self.window.geometry("1000x700")
+        self.window.state('zoomed')
+        self.window.configure(bg='#ECF0F1')
         
-        self.window = tk.Toplevel(parent_window)
-        self.window.title("التقارير اليومية والشهرية")
-        self.window.geometry("1200x700")
-        self.window.configure(bg=self.colors['bg'])
+        # Main Title
+        header = tk.Frame(self.window, bg='#2C3E50', pady=20)
+        header.pack(fill=tk.X)
+        tk.Label(header, text="التقارير المالية والتحليلية", font=('Simplified Arabic', 20, 'bold'), 
+                 bg='#2C3E50', fg='white').pack()
+
+        # Tabs
+        style = ttk.Style()
+        style.configure("TNotebook.Tab", font=('Simplified Arabic', 12, 'bold'), padding=[20, 10])
         
-        self.setup_ui()
-        self.load_today_report()
-    
-    def setup_ui(self):
+        self.notebook = ttk.Notebook(self.window)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Tabs Frames
+        self.tab_daily = tk.Frame(self.notebook, bg='#ECF0F1')
+        self.tab_sellers = tk.Frame(self.notebook, bg='#ECF0F1')
+        self.tab_commissions = tk.Frame(self.notebook, bg='#ECF0F1')
+        
+        self.notebook.add(self.tab_daily, text=" تقرير الخزنة والأرباح (التحصيل والمنصرف) ")
+        self.notebook.add(self.tab_sellers, text=" تقارير حركة بضاعة البائعين ")
+        self.notebook.add(self.tab_commissions, text=" تقارير عمولات فواتير العملاء ")
+        
+        # Setup Tabs
+        self.setup_daily_profit_ui()
+        self.setup_sellers_report_ui()
+        self.setup_commissions_report_ui()
+
+    # --- Tab 1: Daily Profit & Treasury (Original Functionality restored) ---
+    def setup_daily_profit_ui(self):
+        container = tk.Frame(self.tab_daily, bg='white', padx=30, pady=30, relief=tk.RIDGE, bd=1)
+        container.pack(fill=tk.BOTH, expand=True, padx=50, pady=20)
+        
         # Header
-        header_frame = tk.Frame(self.window, bg=self.colors['header_bg'], height=70)
-        header_frame.pack(fill=tk.X)
-        header_frame.pack_propagate(False)
-        
-        tk.Label(header_frame, text="التقارير اليومية والشهرية", 
-                font=('Playpen Sans Arabic', 20, 'bold'),
-                bg=self.colors['header_bg'], fg='white').pack(pady=15)
-        
-        # Main Container
-        main_frame = tk.Frame(self.window, bg=self.colors['bg'])
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Left Panel - Daily Report
-        left_panel = tk.Frame(main_frame, bg=self.colors['card_bg'], relief=tk.RAISED, bd=2)
-        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        tk.Label(left_panel, text="التقرير اليومي", font=('Playpen Sans Arabic', 16, 'bold'),
-                bg=self.colors['card_bg']).pack(pady=10)
+        tk.Label(container, text="تقرير الخزنة والأرباح اليومية", font=('Simplified Arabic', 18, 'bold'), bg='white', fg='#2C3E50').pack(pady=(0, 20))
         
         # Date Selection
-        date_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])
-        date_frame.pack(pady=10)
+        sel_frame = tk.Frame(container, bg='white')
+        sel_frame.pack(pady=10)
+        tk.Label(sel_frame, text="اختر التاريخ:", bg='white', font=('Arial', 12, 'bold')).pack(side=tk.RIGHT, padx=10)
         
-        tk.Label(date_frame, text="التاريخ:", font=('Arial', 12, 'bold'),
-                bg=self.colors['card_bg']).pack(side=tk.RIGHT, padx=5)
+        self.daily_date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
+        entry_date = tk.Entry(sel_frame, textvariable=self.daily_date_var, width=15, font=('Arial', 12), justify='center', relief=tk.SOLID, bd=1)
+        entry_date.pack(side=tk.RIGHT, padx=10)
         
-        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        date_entry = tk.Entry(date_frame, textvariable=self.date_var, font=('Arial', 12),
-                             justify='center', width=15)
-        date_entry.pack(side=tk.RIGHT, padx=5)
+        btn_show = tk.Button(sel_frame, text="عرض التقرير", command=self.show_daily_profit, 
+                            bg='#3498DB', fg='white', font=('Arial', 11, 'bold'))
+        btn_show.pack(side=tk.RIGHT, padx=10)
         
-        tk.Button(date_frame, text="تحديث", command=self.load_selected_date_report,
-                 bg=self.colors['button_bg'], fg='white', font=('Arial', 10, 'bold')).pack(side=tk.RIGHT, padx=5)
+        # Results Grid
+        res_frame = tk.Frame(container, bg='white', pady=30)
+        res_frame.pack(fill=tk.X)
         
-        # Daily Stats
-        stats_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])
-        stats_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Define cards
+        self.lbl_collection = self._create_card(res_frame, "إجمالي التحصيل (الوارد)", "#27AE60", 0)
+        self.lbl_expenses = self._create_card(res_frame, "إجمالي المنصرف (الصادر)", "#C0392B", 1)
+        self.lbl_profit = self._create_card(res_frame, "صافي الخزنة / الربح", "#2C3E50", 2)
         
-        # Collection
-        self.create_stat_row(stats_frame, "إجمالي التحصيل:", "collection", 0, '#27AE60')
+        # Load today's data initially
+        self.show_daily_profit()
+
+    def _create_card(self, parent, title, color, col_idx):
+        frame = tk.Frame(parent, bg=color, padx=20, pady=20, width=250, height=150)
+        frame.grid(row=0, column=col_idx, padx=20, sticky='nsew')
+        parent.grid_columnconfigure(col_idx, weight=1)
+        frame.pack_propagate(False)
         
-        # Expenses
-        self.create_stat_row(stats_frame, "المصاريف:", "expenses", 1, '#E74C3C')
+        tk.Label(frame, text=title, font=('Simplified Arabic', 14, 'bold'), bg=color, fg='white').pack(pady=(10, 5))
+        lbl_val = tk.Label(frame, text="0.00", font=('Arial', 20, 'bold'), bg=color, fg='white')
+        lbl_val.pack(pady=10)
+        return lbl_val
+
+    def show_daily_profit(self):
+        date_val = self.daily_date_var.get()
+        # Use existing method in Database
+        data = self.db.calculate_daily_totals(date_val)
         
-        # Remaining Profit
-        self.create_stat_row(stats_frame, "باقي تحصيل اليوم:", "remaining", 2, '#3498DB')
-        
-        # Buttons
-        btn_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])
-        btn_frame.pack(pady=15)
-        
-        tk.Button(btn_frame, text="حفظ التقرير", command=self.save_current_report,
-                 bg='#27AE60', fg='white', font=('Playpen Sans Arabic', 12, 'bold'),
-                 width=15).pack(side=tk.LEFT, padx=5)
-        
-        tk.Button(btn_frame, text="حساب تلقائي", command=self.auto_calculate,
-                 bg='#2980B9', fg='white', font=('Playpen Sans Arabic', 12, 'bold'),
-                 width=15).pack(side=tk.LEFT, padx=5)
-        
-        # Right Panel - Monthly Report
-        right_panel = tk.Frame(main_frame, bg=self.colors['card_bg'], relief=tk.RAISED, bd=2)
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
-        
-        tk.Label(right_panel, text="التقرير الشهري", font=('Playpen Sans Arabic', 16, 'bold'),
-                bg=self.colors['card_bg']).pack(pady=10)
-        
-        # Month/Year Selection
-        month_frame = tk.Frame(right_panel, bg=self.colors['card_bg'])
-        month_frame.pack(pady=10)
-        
-        current_date = datetime.now()
-        
-        tk.Label(month_frame, text="الشهر:", font=('Arial', 12, 'bold'),
-                bg=self.colors['card_bg']).pack(side=tk.RIGHT, padx=5)
-        
-        self.month_var = tk.StringVar(value=str(current_date.month))
-        month_combo = ttk.Combobox(month_frame, textvariable=self.month_var,
-                                   values=[str(i) for i in range(1, 13)],
-                                   width=5, justify='center', state='readonly')
-        month_combo.pack(side=tk.RIGHT, padx=5)
-        
-        tk.Label(month_frame, text="السنة:", font=('Arial', 12, 'bold'),
-                bg=self.colors['card_bg']).pack(side=tk.RIGHT, padx=5)
-        
-        self.year_var = tk.StringVar(value=str(current_date.year))
-        year_entry = tk.Entry(month_frame, textvariable=self.year_var, font=('Arial', 12),
-                             justify='center', width=8)
-        year_entry.pack(side=tk.RIGHT, padx=5)
-        
-        tk.Button(month_frame, text="عرض", command=self.load_monthly_report,
-                 bg=self.colors['button_bg'], fg='white', font=('Arial', 10, 'bold')).pack(side=tk.RIGHT, padx=5)
-        
-        # Monthly Table
-        table_frame = tk.Frame(right_panel, bg=self.colors['card_bg'])
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Treeview
-        columns = ('date', 'collection', 'expenses', 'remaining')
-        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
-        
-        self.tree.heading('date', text='التاريخ')
-        self.tree.heading('collection', text='التحصيل')
-        self.tree.heading('expenses', text='المصاريف')
-        self.tree.heading('remaining', text='الباقي')
-        
-        self.tree.column('date', width=100, anchor='center')
-        self.tree.column('collection', width=100, anchor='center')
-        self.tree.column('expenses', width=100, anchor='center')
-        self.tree.column('remaining', width=100, anchor='center')
-        
-        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Monthly Totals
-        totals_frame = tk.Frame(right_panel, bg='#34495E')
-        totals_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        tk.Label(totals_frame, text="إجماليات الشهر:", font=('Playpen Sans Arabic', 14, 'bold'),
-                bg='#34495E', fg='white').pack(pady=5)
-        
-        self.monthly_totals_label = tk.Label(totals_frame, text="", font=('Arial', 12, 'bold'),
-                                             bg='#34495E', fg='white')
-        self.monthly_totals_label.pack(pady=5)
-    
-    def create_stat_row(self, parent, label_text, var_name, row, color):
-        frame = tk.Frame(parent, bg=self.colors['card_bg'])
-        frame.pack(fill=tk.X, pady=10)
-        
-        tk.Label(frame, text=label_text, font=('Playpen Sans Arabic', 14, 'bold'),
-                bg=self.colors['card_bg']).pack(side=tk.RIGHT, padx=10)
-        
-        # Initial value 0
-        value_label = tk.Label(frame, text="0 ج.م", font=('Arial', 16, 'bold'),
-                              bg=color, fg='white', width=20, relief=tk.SUNKEN)
-        value_label.pack(side=tk.LEFT, padx=10)
-        
-        setattr(self, f"{var_name}_label", value_label)
-    
-    def load_today_report(self):
-        today = datetime.now().strftime("%Y-%m-%d")
-        self.date_var.set(today)
-        self.load_selected_date_report()
-    
-    def load_selected_date_report(self):
-        target_date = self.date_var.get()
-        
-        # Try to load saved report
-        report = self.db.get_daily_report(target_date)
-        
-        if report:
-            collection = report[1]
-            remaining = report[2]
-            expenses = report[3]
-        else:
-            # Calculate from transactions
-            totals = self.db.calculate_daily_totals(target_date)
-            collection = totals['total_collection']
-            remaining = totals['remaining_profit']
-            expenses = totals['total_expenses']
-        
-        self.collection_label.config(text=f"{format_clean_number(collection)} ج.م")
-        self.expenses_label.config(text=f"{format_clean_number(expenses)} ج.م")
-        self.remaining_label.config(text=f"{format_clean_number(remaining)} ج.م")
-    
-    def auto_calculate(self):
-        target_date = self.date_var.get()
-        totals = self.db.calculate_daily_totals(target_date)
-        
-        collection = totals['total_collection']
-        remaining = totals['remaining_profit']
-        expenses = totals['total_expenses']
-        
-        self.collection_label.config(text=f"{format_clean_number(collection)} ج.م")
-        self.expenses_label.config(text=f"{format_clean_number(expenses)} ج.م")
-        self.remaining_label.config(text=f"{format_clean_number(remaining)} ج.م")
-        
-        messagebox.showinfo("نجاح", "تم حساب البيانات تلقائياً من المعاملات")
-    
-    def save_current_report(self):
-        target_date = self.date_var.get()
-        
-        # Get current values
-        totals = self.db.calculate_daily_totals(target_date)
-        
-        self.db.save_daily_report(
-            target_date,
-            totals['total_collection'],
-            totals['remaining_profit'],
-            totals['total_expenses']
+        self.lbl_collection.config(text=format_clean_number(data['total_collection']))
+        self.lbl_expenses.config(text=format_clean_number(data['total_expenses']))
+        self.lbl_profit.config(text=format_clean_number(data['remaining_profit']))
+
+    # --- Tab 2: Seller Goods Report ---
+    def setup_sellers_report_ui(self):
+        self._setup_generic_report_ui(
+            parent_frame=self.tab_sellers,
+            title="تقارير إجمالي قيمة البضاعة المرحلة للبائعين",
+            desc="إجمالي قيمة البضاعة (سعر × وزن/عدد) التي تم ترحيلها للبائعين خلال الفترة المحددة",
+            action_callback=self.calc_sellers_report,
+            result_label_attr="lbl_sellers_result",
+            color="#E67E22"
         )
-        
-        messagebox.showinfo("نجاح", f"تم حفظ تقرير يوم {target_date}")
-    
-    def load_monthly_report(self):
-        try:
-            year = int(self.year_var.get())
-            month = int(self.month_var.get())
-        except ValueError:
-            messagebox.showerror("خطأ", "الرجاء إدخال سنة وشهر صحيحين")
-            return
-        
-        # Clear tree
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        
-        # Get monthly reports
-        reports = self.db.get_monthly_reports(year, month)
-        
-        total_collection = 0
-        total_remaining = 0
-        total_expenses = 0
-        
-        for report in reports:
-            date = report[0]
-            collection = report[1]
-            remaining = report[2]
-            expenses = report[3]
-            
-            self.tree.insert('', tk.END, values=(
-                date,
-                format_clean_number(collection),
-                format_clean_number(expenses),
-                format_clean_number(remaining)
-            ))
-            
-            total_collection += collection
-            total_remaining += remaining
-            total_expenses += expenses
-        
-        # Update totals
-        self.monthly_totals_label.config(
-            text=f"التحصيل: {format_clean_number(total_collection)} | المصاريف: {format_clean_number(total_expenses)} | الباقي: {format_clean_number(total_remaining)}"
+
+    # --- Tab 3: Commissions Report ---
+    def setup_commissions_report_ui(self):
+        self._setup_generic_report_ui(
+            parent_frame=self.tab_commissions,
+            title="تقارير إيرادات العمولات",
+            desc="إجمالي العمولات (القيمة المادية) المحصلة من فواتير العملاء خلال الفترة المحددة",
+            action_callback=self.calc_commissions_report,
+            result_label_attr="lbl_commissions_result",
+            color="#8E44AD"
         )
+
+    # --- Generic Report UI Builder ---
+    def _setup_generic_report_ui(self, parent_frame, title, desc, action_callback, result_label_attr, color):
+        container = tk.Frame(parent_frame, bg='white', padx=30, pady=30, relief=tk.RIDGE, bd=1)
+        container.pack(fill=tk.BOTH, expand=True, padx=50, pady=20)
         
-        if not reports:
-            messagebox.showinfo("تنبيه", "لا توجد تقارير لهذا الشهر")
+        tk.Label(container, text=title, font=('Simplified Arabic', 16, 'bold'), bg='white', fg=color).pack(pady=(0, 10))
+        tk.Label(container, text=desc, font=('Arial', 11), bg='white', fg='#7F8C8D').pack(pady=(0, 20))
+        
+        select_frame = tk.LabelFrame(container, text="خيارات الفترة", bg='white', font=('Arial', 12, 'bold'), padx=20, pady=20)
+        select_frame.pack(pady=10)
+        
+        tk.Label(select_frame, text="نوع التقرير:", bg='white', font=('Arial', 12)).grid(row=0, column=2, padx=10, sticky='e')
+        period_var = tk.StringVar(value="يومي")
+        combo_period = ttk.Combobox(select_frame, textvariable=period_var, values=["يومي", "شهري", "سنوي"], state="readonly", width=15)
+        combo_period.grid(row=0, column=1, padx=10)
+        combo_period.current(0)
+        
+        inputs_frame = tk.Frame(select_frame, bg='white')
+        inputs_frame.grid(row=1, column=0, columnspan=3, pady=20)
+        
+        year_var = tk.StringVar(value=datetime.now().strftime("%Y"))
+        month_var = tk.StringVar(value=datetime.now().strftime("%m"))
+        day_var = tk.StringVar(value=datetime.now().strftime("%d"))
+        
+        def update_inputs(*args):
+            for widget in inputs_frame.winfo_children():
+                widget.destroy()
+            p_type = combo_period.get()
+            
+            # Year
+            tk.Label(inputs_frame, text="السنة:", bg='white').pack(side=tk.RIGHT, padx=5)
+            tk.Entry(inputs_frame, textvariable=year_var, width=6, justify='center', relief=tk.SOLID, bd=1).pack(side=tk.RIGHT, padx=5)
+            
+            if p_type in ["شهري", "يومي"]:
+                tk.Label(inputs_frame, text="الشهر:", bg='white').pack(side=tk.RIGHT, padx=5)
+                m_vals = [f"{i:02d}" for i in range(1, 13)]
+                ttk.Combobox(inputs_frame, textvariable=month_var, values=m_vals, width=4, state="readonly").pack(side=tk.RIGHT, padx=5)
+                
+            if p_type == "يومي":
+                tk.Label(inputs_frame, text="اليوم:", bg='white').pack(side=tk.RIGHT, padx=5)
+                d_vals = [f"{i:02d}" for i in range(1, 32)]
+                ttk.Combobox(inputs_frame, textvariable=day_var, values=d_vals, width=4, state="readonly").pack(side=tk.RIGHT, padx=5)
+
+        combo_period.bind("<<ComboboxSelected>>", update_inputs)
+        update_inputs()
+        
+        btn = tk.Button(container, text="عرض التقرير", 
+                       command=lambda: action_callback(period_var.get(), year_var.get(), month_var.get(), day_var.get()),
+                       bg=color, fg='white', font=('Arial', 12, 'bold'), width=20)
+        btn.pack(pady=20)
+        
+        res_frame = tk.Frame(container, bg='#F4F6F7', padx=30, pady=30, relief=tk.SUNKEN, bd=1)
+        res_frame.pack(fill=tk.X, pady=10)
+        
+        res_label = tk.Label(res_frame, text="---", font=('Arial', 28, 'bold'), bg='#F4F6F7', fg='#2C3E50')
+        res_label.pack()
+        setattr(self, result_label_attr, res_label)
+
+    def calc_sellers_report(self, period_type, year, month, day):
+        if not year.isdigit(): return
+        db_period = {"يومي": "day", "شهري": "month", "سنوي": "year"}[period_type]
+        date_str = f"{year}-{month}-{day}" if period_type=="يومي" else (f"{year}-{month}" if period_type=="شهري" else year)
+            
+        val = self.db.get_sellers_sales_total(db_period, date_str)
+        getattr(self, "lbl_sellers_result").config(text=f"{format_clean_number(val)} ج.م")
+
+    def calc_commissions_report(self, period_type, year, month, day):
+        if not year.isdigit(): return
+        db_period = {"يومي": "day", "شهري": "month", "سنوي": "year"}[period_type]
+        date_str = f"{year}-{month}-{day}" if period_type=="يومي" else (f"{year}-{month}" if period_type=="شهري" else year)
+            
+        val = self.db.get_commissions_total_by_period(db_period, date_str)
+        getattr(self, "lbl_commissions_result").config(text=f"{format_clean_number(val)} ج.م")

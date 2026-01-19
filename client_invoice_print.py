@@ -2,6 +2,7 @@
 فئة طباعة فاتورة العملاء بأبعاد 20×15 سم
 """
 
+import traceback
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import os
@@ -360,6 +361,10 @@ class ClientInvoicePrintWindow:
                 hdc.StartDoc("فاتورة عميل")
                 hdc.StartPage()
                 
+                # Get printer resolution
+                horz_res = hdc.GetDeviceCaps(win32con.HORZRES)
+                vert_res = hdc.GetDeviceCaps(win32con.VERTRES)
+                
                 # أبعاد مخصصة (21×15 سم)
                 # 21 cm width, 15 cm height
                 pixel_width = int(21 * (horz_res / 21)) # Standard proportion
@@ -452,29 +457,35 @@ class ClientInvoicePrintWindow:
                 # Right Box: Summary
                 box_r_x = horz_res - margin_x
                 y_r = footer_y_start
-                y_r += draw_r(f"الاجمالي: {self.data['total_goods']:.2f}", box_r_x, y_r, f_header) + 10
+                total_goods_int = int(round(self.data['total_goods']))
+                y_r += draw_r(f"الاجمالي: {total_goods_int}", box_r_x, y_r, f_header) + 10
                 
-                comm_val = 0
-                for t in self.data['transactions']:
-                    if t[0] == "عمولة": comm_val = t[4]
-                y_r += draw_r(f"العمولة: {comm_val:.2f}", box_r_x, y_r, f_header) + 15
+                # Show TOTAL expenses (passed as total_deductions)
+                total_exp_abs = int(round(abs(self.data['total_deductions'])))
+                y_r += draw_r(f"المصاريف: {total_exp_abs}", box_r_x, y_r, f_header) + 15
+                
                 hdc.MoveTo(horz_res - margin_x - box_w, y_r); hdc.LineTo(horz_res - margin_x, y_r); y_r += 10
-                draw_r(f"الصافي: {self.data['final_total']:.2f}", box_r_x, y_r, f_title)
                 
-                # Left Box: Expenses Details (Matching labels in image)
+                final_int = int(round(self.data['final_total']))
+                draw_r(f"الصافي: {final_int}", box_r_x, y_r, f_title)
+                
+                # Left Box: Expenses Details
                 y_l = footer_y_start
                 for t in self.data['transactions']:
-                    if t[5] == "خصم":
+                    # Include both Discount and Addition types
+                    if t[5] in ["خصم", "اضافة"]:
                         draw_l(t[0], margin_x + 100, y_l, f_normal)
-                        draw_l(f"{t[4]:.2f}", margin_x, y_l, f_normal)
+                        val_int = int(round(t[4]))
+                        draw_l(f"{val_int}", margin_x, y_l, f_normal)
                         y_l += int(vert_res * 0.025)
                 y_l += 5; hdc.MoveTo(margin_x, y_l); hdc.LineTo(margin_x + box_w, y_l); y_l += 5
                 draw_l("الأجمالي", margin_x + 100, y_l, f_header)
-                draw_l(f"{self.data['total_deductions']:.2f}", margin_x, y_l, f_header)
+                draw_l(f"{total_exp_abs}", margin_x, y_l, f_header)
 
                 hdc.EndPage(); hdc.EndDoc()
             finally:
                 win32print.ClosePrinter(hprinter)
             messagebox.showinfo("نجاح", "تم إرسال الفاتورة للطابعة")
         except Exception as e:
-            messagebox.showerror("خطأ", f"فشلت الطباعة:\n{e}")
+            err_details = traceback.format_exc()
+            messagebox.showerror("خطأ", f"فشلت الطباعة:\n{e}\n\nالتفاصيل:\n{err_details}")

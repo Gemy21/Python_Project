@@ -11,7 +11,7 @@ class StartMenu:
         self.root.geometry("1200x800")
         self.root.resizable(True, True)
         
-        # تهيئة مدير الألوان واختيار ثيم عشوائي
+        # تهيئة مدير الألوان واختيار ثيم عشوائي 
         self.color_manager = ColorManager()
         self.theme = self.color_manager.get_random_theme()
         
@@ -156,6 +156,7 @@ class StartMenu:
             ("جديد", self.open_new_entry),
             ("ترحيل الزراعة", self.open_agriculture_transfer),
             ("حسابات", self.open_accounts_module),
+            ("تقارير", self.open_reports_page),
             ("مزامنة البيانات", self.open_data_sync),
         ]
 
@@ -222,6 +223,11 @@ class StartMenu:
         )
         if result:
             self.on_closing()
+            
+    def open_reports_page(self):
+        """فتح صفحة التقارير"""
+        from reports_page import DailyReportsPage
+        DailyReportsPage(self.root)
     
     def auto_save_previous_day_report(self):
         """حفظ تقرير اليوم السابق تلقائياً عند فتح البرنامج"""

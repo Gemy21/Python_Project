@@ -310,15 +310,26 @@ class ManualInvoicesPage:
                 owner = w[1].get().strip()
                 if not owner: continue
                 
-                date = w[7].get()
-                net = float(w[6].cget('text').replace(',', '') or 0)
-                final = float(w[13].cget('text').replace(',', '') or 0)
+                date = w[7].get().strip()
+                if not date: date = datetime.now().strftime("%Y-%m-%d")
                 
-                nolon = w[8].get()
-                comm = w[9].get()
-                mashal = w[10].get()
-                rent = w[11].get()
-                cash = w[12].get()
+                try:
+                    net = float(w[6].cget('text').replace(',', '').strip() or 0)
+                except ValueError: net = 0.0
+                
+                try:
+                    final = float(w[13].cget('text').replace(',', '').strip() or 0)
+                except ValueError: final = 0.0
+                
+                def get_clean(idx):
+                    val = w[idx].get().strip()
+                    return val if val else "0"
+
+                nolon = get_clean(8)
+                comm = get_clean(9)
+                mashal = get_clean(10)
+                rent = get_clean(11)
+                cash = get_clean(12)
                 
                 cursor.execute('''INSERT INTO client_invoices (owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total)
                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -331,7 +342,9 @@ class ManualInvoicesPage:
             else:
                  messagebox.showwarning("تنبيه", "لا توجد بيانات لحفظها. تأكد من إدخال اسم العميل.")
         except Exception as e:
-            messagebox.showerror("خطأ", f"حدث خطأ أثناء الحفظ: {e}")
+            import traceback
+            err = traceback.format_exc()
+            messagebox.showerror("خطأ", f"حدث خطأ أثناء الحفظ:\n{e}\n{err}")
         finally:
             conn.close()
 
@@ -399,4 +412,7 @@ class ManualInvoicesPage:
             'transactions': transactions
         }
         
-        ClientInvoicePrintWindow(self.window, print_data)
+        
+        print_win = ClientInvoicePrintWindow(self.window, print_data)
+        # Auto-print immediately on default printer
+        print_win.print_direct()

@@ -2143,3 +2143,94 @@ class Database:
         conn.close()
         return expenses
 
+
+    # --- طرق التقارير الجديدة ---
+
+    def get_sellers_sales_total(self, period, date_val):
+        """
+        حساب إجمالي مبيعات البائعين لفترة محددة
+        period: 'day', 'month', 'year'
+        date_val: 'YYYY-MM-DD' or 'YYYY-MM' or 'YYYY'
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # نحتاج استخراج التاريخ فقط من created_at (datetime)
+        if period == 'day':
+            where_clause = "date(created_at) = date(?)"
+        elif period == 'month':
+            where_clause = "strftime('%Y-%m', created_at) = ?"
+        elif period == 'year':
+            where_clause = "strftime('%Y', created_at) = ?"
+        else:
+            return 0
+
+        # حساب القيمة: (الوزن * السعر) إذا الوزن > 0، وإلا (العدد * السعر)
+        query = f"""
+            SELECT SUM(
+                CASE 
+                    WHEN weight > 0 THEN weight * unit_price 
+                    ELSE count * unit_price 
+                END
+            ) 
+            FROM agriculture_transfers 
+            WHERE {where_clause}
+        """
+        
+        try:
+            cursor.execute(query, (date_val,))
+            result = cursor.fetchone()[0]
+            return result if result else 0
+        except Exception as e:
+            print(f"Error in sales report: {e}")
+            return 0
+        finally:
+            conn.close()
+
+    def get_commissions_total_by_period(self, period, date_val):
+        """
+        حساب إجمالي العمولات لفترة محددة
+        يتم جلب البيانات وحسابها في بايثون للتعامل مع النسب المئوية
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        if period == 'day':
+            # invoice_date is conventionally date string YYYY-MM-DD
+            where_clause = "invoice_date = ?" 
+        elif period == 'month':
+            where_clause = "strftime('%Y-%m', invoice_date) = ?"
+        elif period == 'year':
+            where_clause = "strftime('%Y', invoice_date) = ?"
+        else:
+            return 0
+
+        # نجلب العمولة وأيضاً المبلغ الصافي (لأنه لو العمولة نسبة مئوية سنحتاج الصافي)
+        query = f"SELECT commission, net_amount FROM client_invoices WHERE {where_clause}"
+        
+        total_commission = 0
+        try:
+            cursor.execute(query, (date_val,))
+            rows = cursor.fetchall()
+            
+            for comm_raw, net_amount in rows:
+                if not comm_raw: continue
+                comm_str = str(comm_raw)
+                
+                try:
+                    if '%' in comm_str:
+                        percentage = float(comm_str.replace('%', ''))
+                        val = (net_amount * percentage) / 100
+                        total_commission += val
+                    else:
+                        total_commission += float(comm_str)
+                except ValueError:
+                    pass
+                    
+            return total_commission
+        except Exception as e:
+            print(f"Error in commission report: {e}")
+            return 0
+        finally:
+            conn.close()
+
