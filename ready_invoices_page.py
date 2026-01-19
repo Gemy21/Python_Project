@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from database import Database
-from utils import ColorManager
+from utils import ColorManager, format_clean_number
 from datetime import datetime
 
 class ReadyInvoicesPage:
@@ -53,34 +53,51 @@ class ReadyInvoicesPage:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # === Header Section ===
-        header_frame = tk.Frame(self.scrollable_frame, bg='#2C3E50', pady=20)
-        header_frame.pack(fill=tk.X)
+        # === Header Section (Matching Image) ===
+        header_frame = tk.Frame(self.scrollable_frame, bg='white', pady=10)
+        header_frame.pack(fill=tk.X, padx=50)
         
-        tk.Label(header_frame, text="فاتورة عميل", 
-                font=('Simplified Arabic', 24, 'bold'), fg='white', bg='#2C3E50').pack()
-        
-        tk.Label(header_frame, text="خلفاء الحاج محي غريب بعجر", 
-                font=('Simplified Arabic', 18, 'bold'), fg='white', bg='#2C3E50').pack()
-        
-        # === Info Section (Client & Date) - Editable ===
-        info_frame = tk.Frame(self.scrollable_frame, bg='white', pady=20)
-        info_frame.pack(fill=tk.X, padx=50)
+        # Left Side (Phones & Names)
+        left_header = tk.Frame(header_frame, bg='white')
+        left_header.pack(side=tk.LEFT)
+        tk.Label(left_header, text="محمد / 01014501415\nسعيد / 01009330363\nأحمد / 01002367830", 
+                 font=('Arial', 12, 'bold'), bg='white', justify='right').pack()
+
+        # Right Side (Company Name & Info)
+        right_header = tk.Frame(header_frame, bg='white')
+        right_header.pack(side=tk.RIGHT)
+        tk.Label(right_header, text="خلفاء الحاج محي غريب بعجر\nلتجارة الخضروات والفواكه", 
+                 font=('Simplified Arabic', 18, 'bold'), bg='white', justify='right').pack()
+        tk.Label(right_header, text="كفر الشيخ - فوه ميدان السوق الكبير\nت / 0472976880", 
+                 font=('Simplified Arabic', 12, 'bold'), bg='white', justify='right').pack()
+
+        # Center (Logo & Large Name)
+        center_header = tk.Frame(header_frame, bg='white')
+        center_header.pack(side=tk.TOP, pady=5)
+        # Using a text emoji or placeholder for logo
+        tk.Label(center_header, text="🍎", font=('Arial', 30), bg='white').pack()
+        tk.Label(center_header, text="MOHEY BAJAR", font=('Arial', 16, 'bold'), bg='white').pack()
+
+        tk.Frame(self.scrollable_frame, height=2, bg='black').pack(fill=tk.X, padx=50)
+
+        # === Client & Date Bar ===
+        client_bar = tk.Frame(self.scrollable_frame, bg='white', pady=10)
+        client_bar.pack(fill=tk.X, padx=50)
         
         # Date (Left)
-        date_frame = tk.Frame(info_frame, bg='white')
+        date_frame = tk.Frame(client_bar, bg='white')
         date_frame.pack(side=tk.LEFT)
-        tk.Label(date_frame, text="التاريخ:", font=('Arial', 14, 'bold'), bg='white').pack(side=tk.LEFT)
-        self.date_entry = tk.Entry(date_frame, font=('Arial', 14), justify='center', width=15, bg='#F4F6F7', relief=tk.SOLID, bd=1)
+        tk.Label(date_frame, text="تحريراً في :", font=('Simplified Arabic', 14, 'bold'), bg='white').pack(side=tk.LEFT)
+        self.date_entry = tk.Entry(date_frame, font=('Arial', 14), justify='center', width=15, bg='#F8F9F9', relief=tk.FLAT)
         self.date_entry.pack(side=tk.LEFT, padx=5)
         self.date_entry.insert(0, datetime.now().strftime("%Y/%m/%d"))
         
         # Client (Right)
-        client_frame = tk.Frame(info_frame, bg='white')
+        client_frame = tk.Frame(client_bar, bg='white')
         client_frame.pack(side=tk.RIGHT)
-        tk.Label(client_frame, text="العميل:", font=('Arial', 14, 'bold'), bg='white').pack(side=tk.RIGHT)
-        self.client_entry = tk.Entry(client_frame, font=('Arial', 14), justify='center', width=30, bg='#F4F6F7', relief=tk.SOLID, bd=1)
+        self.client_entry = tk.Entry(client_frame, font=('Simplified Arabic', 16, 'bold'), justify='right', width=30, bg='#F8F9F9', relief=tk.FLAT)
         self.client_entry.pack(side=tk.RIGHT, padx=5)
+        tk.Label(client_frame, text="الوارد من السيد /", font=('Simplified Arabic', 14, 'bold'), bg='white').pack(side=tk.RIGHT)
         
         # Set Client Name
         client_name_val = ""
@@ -91,161 +108,105 @@ class ReadyInvoicesPage:
         self.client_entry.insert(0, client_name_val)
         
         # === Transactions Table ===
-        table_frame = tk.Frame(self.scrollable_frame, bg='white', pady=10)
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=50)
+        table_frame = tk.Frame(self.scrollable_frame, bg='white')
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=50, pady=10)
         
-        # Headers
-        headers = ['الصنف', 'السعر', 'الوزن', 'العدد', 'المبلغ']
-        header_bg = '#34495E'
+        # Table Headers (Left to Right to match image layout)
+        display_headers = ['الصنف', 'السعر', 'الوزن', 'العدد', 'المبلغ']
         
-        for i, header in enumerate(headers):
-            lbl = tk.Label(
-                table_frame,
-                text=header,
-                font=('Simplified Arabic', 14, 'bold'),
-                bg=header_bg,
-                fg='white',
-                relief=tk.RAISED,
-                bd=1,
-                pady=10
-            )
-            lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
-            table_frame.grid_columnconfigure(i, weight=1)
-            
+        for i, h in enumerate(display_headers):
+            lbl = tk.Label(table_frame, text=h, font=('Simplified Arabic', 14, 'bold'), 
+                          bg='white', fg='black', relief=tk.SOLID, bd=1, pady=8)
+            lbl.grid(row=0, column=i, sticky='nsew')
+            table_frame.grid_columnconfigure(i, weight=1 if h == 'الصنف' else 0, minsize=100)
+
         # Process Data - Grouping by Item and Price
         self.total_net_amount = 0
-        grouped_transactions = {} # Key: (item_name, price)
+        grouped_transactions = {}
         
         if self.transfer_data:
             data_list = self.transfer_data if self.is_multi else [self.transfer_data]
-            
             for item_data in data_list:
                 if self.is_multi:
-                    # item_data: (id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type)
-                    t_id = item_data[0]
-                    item = item_data[3]
-                    price = item_data[4] or 0
-                    weight = item_data[5] or 0
-                    count = item_data[6] or 0
-                    
-                    net = 0
-                    if weight > 0: net = weight * price
-                    elif count > 0: net = count * price
-                    
-                    self.total_net_amount += net
-                    
-                    key = (item, price)
-                    if key in grouped_transactions:
-                        grouped_transactions[key]['weight'] += weight
-                        grouped_transactions[key]['count'] += count
-                        grouped_transactions[key]['amount'] += net
-                    else:
-                        grouped_transactions[key] = {
-                            'item': item, 'price': price, 'weight': weight, 'count': count, 'amount': net, 'type': 'بضاعة'
-                        }
+                    item = item_data[3]; price = item_data[4] or 0; weight = item_data[5] or 0; count = item_data[6] or 0
                 else:
-                    # Legacy/Single transfer data handling
                     vals = list(item_data)
-                    try:
-                        item = vals[3]
-                        price = float(vals[4]) or 0
-                        weight = float(vals[2]) or 0
-                        count = float(vals[1]) or 0
-                        net = float(vals[5]) or 0
-                        
-                        self.total_net_amount += net
-                        key = (item, price)
-                        if key in grouped_transactions:
-                            grouped_transactions[key]['weight'] += weight
-                            grouped_transactions[key]['count'] += count
-                            grouped_transactions[key]['amount'] += net
-                        else:
-                            grouped_transactions[key] = {
-                                'item': item, 'price': price, 'weight': weight, 'count': count, 'amount': net, 'type': 'بضاعة'
-                            }
-                    except: pass
-        
-        # Convert grouped dictionary to list for display
+                    try: item = vals[3]; price = float(vals[4]); weight = float(vals[2]); count = float(vals[1])
+                    except: continue
+                
+                net = (weight * price) if weight > 0 else (count * price)
+                self.total_net_amount += net
+                key = (item, price)
+                if key in grouped_transactions:
+                    grouped_transactions[key]['weight'] += weight
+                    grouped_transactions[key]['count'] += count
+                    grouped_transactions[key]['amount'] += net
+                else:
+                    grouped_transactions[key] = {'item': item, 'price': price, 'weight': weight, 'count': count, 'amount': net}
+
         self.processed_transactions = list(grouped_transactions.values())
         
-        # Display Rows
         for idx, trans in enumerate(self.processed_transactions, start=1):
-            row_bg = '#D6EAF8' if idx % 2 == 0 else '#EBF5FB'
-            
-            vals = [
+            row_data = [
                 trans['item'],
-                f"{trans['price']:.2f}",
-                f"{trans['weight']:.2f}",
-                f"{trans['count']:.0f}",
-                f"{trans['amount']:.2f}"
+                format_clean_number(trans['price']),
+                format_clean_number(trans['weight']),
+                format_clean_number(trans['count']),
+                format_clean_number(trans['amount'])
             ]
-            
-            for col, val in enumerate(vals):
-                lbl = tk.Label(
-                    table_frame,
-                    text=val,
-                    font=('Arial', 12),
-                    bg=row_bg,
-                    relief=tk.SOLID,
-                    bd=1,
-                    pady=8
-                )
-                lbl.grid(row=idx, column=col, sticky='nsew', padx=1, pady=1)
+            for col, val in enumerate(row_data):
+                lbl = tk.Label(table_frame, text=val, font=('Arial', 12, 'bold'), bg='white', relief=tk.SOLID, bd=1, pady=8)
+                lbl.grid(row=idx, column=col, sticky='nsew')
                 
-        # === Deductions Section (Editable) ===
-        deductions_frame = tk.LabelFrame(self.scrollable_frame, text="الخصومات والإضافات", font=('Simplified Arabic', 16, 'bold'), bg='white', padx=20, pady=20)
-        deductions_frame.pack(fill=tk.X, padx=50, pady=20)
-        
-        # Grid for deductions
-        # Fields: Nolon, Commission, Mashal, Rent, Cash
-        fields_config = [
-            ("نولون", "nolon"),
-            ("العمولة", "commission"),
-            ("مشال", "mashal"),
-            ("إيجار عدة", "rent"),
-            ("نقدية", "cash")
-        ]
-        
-        self.deduction_entries = {}
-        
-        for i, (label_text, key) in enumerate(fields_config):
-            # Frame for each field
-            f = tk.Frame(deductions_frame, bg='white')
-            f.pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=10)
-            
-            tk.Label(f, text=label_text, font=('Arial', 12, 'bold'), bg='#3498DB', fg='white').pack(fill=tk.X)
-            
-            entry = tk.Entry(f, font=('Arial', 14), justify='center', relief=tk.SOLID, bd=1, bg='#FDEDEC')
-            entry.pack(fill=tk.X, pady=5, ipady=5)
-            
-            # Set default value
-            default_val = self.deductions.get(key, "0")
-            if key == "commission" and default_val == "0": default_val = "10%" # Default commission
-            
-            entry.insert(0, str(default_val))
-            
-            # Bind to update totals
-            entry.bind('<KeyRelease>', self.update_totals)
-            
-            self.deduction_entries[key] = entry
+        # === Footer Section (2 Boxes side-by-side as in image) ===
+        footer_container = tk.Frame(self.scrollable_frame, bg='white', pady=20)
+        footer_container.pack(fill=tk.X, padx=50)
 
-        # === Totals Section ===
-        totals_frame = tk.Frame(self.scrollable_frame, bg='#FDF2E9', relief=tk.RAISED, bd=2, pady=15)
-        totals_frame.pack(fill=tk.X, padx=50, pady=20)
+        # Right Side Box (Summary)
+        summary_box = tk.Frame(footer_container, relief=tk.SOLID, bd=2, bg='white', padx=10, pady=10)
+        summary_box.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
         
-        def add_total_row(label, var_name, color, bg_color):
-            row = tk.Frame(totals_frame, bg='#FDF2E9')
-            row.pack(fill=tk.X, pady=5, padx=20)
-            
-            val_lbl = tk.Label(row, text="0", font=('Arial', 18, 'bold'), bg=bg_color, fg=color, width=15, relief=tk.SOLID, bd=1)
+        def add_summary_row(parent, label, var_name, font_size=18, bg='#EBF5FB'):
+            row = tk.Frame(parent, bg='white')
+            row.pack(fill=tk.X, pady=5)
+            val_lbl = tk.Label(row, text="0", font=('Arial', font_size, 'bold'), bg=bg, relief=tk.SUNKEN, width=15)
             val_lbl.pack(side=tk.LEFT)
             setattr(self, var_name, val_lbl)
+            tk.Label(row, text=label, font=('Simplified Arabic', font_size, 'bold'), bg='white').pack(side=tk.RIGHT, padx=10)
+
+        add_summary_row(summary_box, "الاجمالي", "lbl_total_goods")
+        add_summary_row(summary_box, "العمولة", "lbl_total_comm_display", bg='#FDEDEC')
+        tk.Frame(summary_box, height=2, bg='black').pack(fill=tk.X, pady=10)
+        add_summary_row(summary_box, "الصافي", "lbl_final_total", font_size=28, bg='#EAFAF1')
+
+        # Left Side Box (Detailed Reductions)
+        deductions_box = tk.Frame(footer_container, relief=tk.SOLID, bd=2, bg='white', padx=10, pady=10)
+        deductions_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        self.deduction_entries = {}
+        fields = [("عمولة", "commission"), ("مشال", "mashal"), ("ايجار عده", "rent"), ("نولون", "nolon"), ("نقدية", "cash")]
+        
+        for label, key in fields:
+            row = tk.Frame(deductions_box, bg='white')
+            row.pack(fill=tk.X, pady=2)
+            entry = tk.Entry(row, font=('Arial', 14, 'bold'), justify='center', width=12, bg='#FDEDEC')
+            entry.pack(side=tk.LEFT)
             
-            tk.Label(row, text=label, font=('Simplified Arabic', 16, 'bold'), bg='#FDF2E9', fg='#2C3E50').pack(side=tk.LEFT, padx=10)
+            # استعادة القيمة المحفوظة من النافذة السابقة
+            default_val = self.deductions.get(key, "0")
+            entry.insert(0, str(default_val))
             
-        add_total_row("إجمالي قيمة البضاعة:", "lbl_total_goods", '#2980B9', '#EBF5FB')
-        add_total_row("إجمالي الخصومات والمصاريف:", "lbl_total_deductions", '#C0392B', '#FDEDEC')
-        add_total_row("الصافي النهائي المطلوب:", "lbl_final_total", '#27AE60', '#EAFAF1')
+            entry.bind('<KeyRelease>', self.update_totals)
+            self.deduction_entries[key] = entry
+            tk.Label(row, text=label, font=('Simplified Arabic', 14, 'bold'), bg='white', width=10, anchor='e').pack(side=tk.RIGHT, padx=5)
+
+        # Total Deductions for left box
+        tk.Frame(deductions_box, bg='black', height=1).pack(fill=tk.X, pady=5)
+        row_total = tk.Frame(deductions_box, bg='#FDEDEC')
+        row_total.pack(fill=tk.X, pady=5)
+        self.lbl_total_deductions = tk.Label(row_total, text="0", font=('Arial', 14, 'bold'), bg='#FDEDEC')
+        self.lbl_total_deductions.pack(side=tk.LEFT)
+        tk.Label(row_total, text="الأجمالي", font=('Simplified Arabic', 14, 'bold'), bg='#FDEDEC').pack(side=tk.RIGHT, padx=5)
         
         # Initial Calculation
         self.update_totals()
@@ -323,9 +284,10 @@ class ReadyInvoicesPage:
             final_total = total_goods - total_deductions
             
             # Update Labels
-            self.lbl_total_goods.config(text=f"{format_clean_number(total_goods)} جنيه")
-            self.lbl_total_deductions.config(text=f"{format_clean_number(total_deductions)} جنيه")
-            self.lbl_final_total.config(text=f"{format_clean_number(final_total)} جنيه")
+            self.lbl_total_goods.config(text=format_clean_number(total_goods))
+            self.lbl_total_comm_display.config(text=format_clean_number(commission)) # Use 'commission' for summary box
+            self.lbl_total_deductions.config(text=format_clean_number(total_deductions)) # Sum of all in left box
+            self.lbl_final_total.config(text=format_clean_number(final_total))
             
             # Store values for saving
             self.current_values = {

@@ -362,10 +362,9 @@ class PrintPreviewWindow:
                     pass
             
             # إنشاء PDF
-            # الكشف: عرض 10 سم × طول 29 سم
-            from reportlab.lib.units import cm
-            page_width = 10 * cm
-            page_height = 29 * cm
+            # الكشف: عرض 11 سم × طول 30 سم
+            page_width = 11 * cm
+            page_height = 30 * cm
             
             c = canvas.Canvas(filepath, pagesize=(page_width, page_height))
             width, height = page_width, page_height
@@ -476,11 +475,10 @@ class PrintPreviewWindow:
                 hdc.StartDoc("فاتورة مبيعات")
                 hdc.StartPage()
                 
-                # مقاييس الصفحة
-                horz_res = hdc.GetDeviceCaps(8)  # HORZRES
-                vert_res = hdc.GetDeviceCaps(10)  # VERTRES
+                # أبعاد مخصصة (11×30 سم)
+                # 11 cm width, 30 cm height
+                pixel_width = int(11 * (horz_res / (horz_res / (3.78 * 11) if horz_res > 0 else 1))) # Approximating scale
                 
-                # هوامش
                 margin_x = int(horz_res * 0.05)
                 margin_y = int(vert_res * 0.05)
                 width = horz_res - 2 * margin_x

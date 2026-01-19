@@ -964,8 +964,9 @@ class ClientsPage:
                  font=self.fonts['button'], bg='#27AE60', fg='white', width=20, height=2).pack(pady=20)
 
     def show_added_invoices(self):
-        """عرض سجل الفواتير التي تم حفظها مسبقاً"""
-        self.show_all_invoices_window("سجل فواتير العملاء المضافة (المحفوظة)")
+        """عرض سجل الفواتير التي تم حفظها مسبقاً في جدول إكسيل مفتوح"""
+        from manual_invoices_page import ManualInvoicesPage
+        ManualInvoicesPage(self.window)
 
     def show_all_invoices_window(self, title):
         win = tk.Toplevel(self.window)
@@ -1039,30 +1040,33 @@ class ClientsPage:
                  return
             
             inv_id = int(selected[0])
-            
-            selected_inv = None
-            for inv in invoices:
-                if inv[0] == inv_id:
-                     selected_inv = inv
-                     break
-            
+            selected_inv = next((inv for inv in invoices if inv[0] == inv_id), None)
             if not selected_inv: return
 
+            # Check if it's a manual invoice
             transfers = self.db.get_transfers_by_invoice_id(inv_id)
+            is_manual = any(t[8] == 'manual' for t in transfers)
             
-            deductions = {
-                'nolon': str(selected_inv[2]),
-                'commission': str(selected_inv[3]),
-                'mashal': str(selected_inv[4]),
-                'rent': str(selected_inv[5]),
-                'cash': str(selected_inv[6])
-            }
-            
-            ReadyInvoicesPage(win, transfer_data=transfers, deductions=deductions, is_multi=True, invoice_id=inv_id)
+            if is_manual:
+                from manual_invoices_page import ManualInvoicesPage
+                ManualInvoicesPage(win, invoice_id=inv_id)
+            else:
+                deductions = {
+                    'nolon': str(selected_inv[2]),
+                    'commission': str(selected_inv[3]),
+                    'mashal': str(selected_inv[4]),
+                    'rent': str(selected_inv[5]),
+                    'cash': str(selected_inv[6])
+                }
+                ReadyInvoicesPage(win, transfer_data=transfers, deductions=deductions, is_multi=True, invoice_id=inv_id)
 
         # Buttons
         btn_frame = tk.Frame(win, bg=self.colors['bg'])
         btn_frame.pack(pady=10)
         
+        from manual_invoices_page import ManualInvoicesPage
         tk.Button(btn_frame, text="عرض/تعديل التفاصيل", command=open_details, 
-                 font=self.fonts['button'], bg=self.colors['button_bg'], fg='white').pack(side=tk.TOP)
+                 font=self.fonts['button'], bg=self.colors['button_bg'], fg='white').pack(side=tk.RIGHT, padx=10)
+                 
+        tk.Button(btn_frame, text="فاتورة يدوية جديدة +", command=lambda: ManualInvoicesPage(win), 
+                 font=self.fonts['button'], bg='#27AE60', fg='white').pack(side=tk.RIGHT, padx=10)
