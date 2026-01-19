@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from database import Database
 from datetime import datetime, timedelta
 import calendar
+from utils import format_clean_number
 
 class DailyReportsPage:
     def __init__(self, parent_window):
@@ -71,7 +72,7 @@ class DailyReportsPage:
         self.create_stat_row(stats_frame, "المصاريف:", "expenses", 1, '#E74C3C')
         
         # Remaining Profit
-        self.create_stat_row(stats_frame, "صافي ربح اليوم:", "remaining", 2, '#3498DB')
+        self.create_stat_row(stats_frame, "باقي تحصيل اليوم:", "remaining", 2, '#3498DB')
         
         # Buttons
         btn_frame = tk.Frame(left_panel, bg=self.colors['card_bg'])
@@ -160,7 +161,8 @@ class DailyReportsPage:
         tk.Label(frame, text=label_text, font=('Playpen Sans Arabic', 14, 'bold'),
                 bg=self.colors['card_bg']).pack(side=tk.RIGHT, padx=10)
         
-        value_label = tk.Label(frame, text="0.00 ج.م", font=('Arial', 16, 'bold'),
+        # Initial value 0
+        value_label = tk.Label(frame, text="0 ج.م", font=('Arial', 16, 'bold'),
                               bg=color, fg='white', width=20, relief=tk.SUNKEN)
         value_label.pack(side=tk.LEFT, padx=10)
         
@@ -188,9 +190,9 @@ class DailyReportsPage:
             remaining = totals['remaining_profit']
             expenses = totals['total_expenses']
         
-        self.collection_label.config(text=f"{collection:,.2f} ج.م")
-        self.expenses_label.config(text=f"{expenses:,.2f} ج.م")
-        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
+        self.collection_label.config(text=f"{format_clean_number(collection)} ج.م")
+        self.expenses_label.config(text=f"{format_clean_number(expenses)} ج.م")
+        self.remaining_label.config(text=f"{format_clean_number(remaining)} ج.م")
     
     def auto_calculate(self):
         target_date = self.date_var.get()
@@ -200,9 +202,9 @@ class DailyReportsPage:
         remaining = totals['remaining_profit']
         expenses = totals['total_expenses']
         
-        self.collection_label.config(text=f"{collection:,.2f} ج.م")
-        self.expenses_label.config(text=f"{expenses:,.2f} ج.م")
-        self.remaining_label.config(text=f"{remaining:,.2f} ج.م")
+        self.collection_label.config(text=f"{format_clean_number(collection)} ج.م")
+        self.expenses_label.config(text=f"{format_clean_number(expenses)} ج.م")
+        self.remaining_label.config(text=f"{format_clean_number(remaining)} ج.م")
         
         messagebox.showinfo("نجاح", "تم حساب البيانات تلقائياً من المعاملات")
     
@@ -248,9 +250,9 @@ class DailyReportsPage:
             
             self.tree.insert('', tk.END, values=(
                 date,
-                f"{collection:,.2f}",
-                f"{expenses:,.2f}",
-                f"{remaining:,.2f}"
+                format_clean_number(collection),
+                format_clean_number(expenses),
+                format_clean_number(remaining)
             ))
             
             total_collection += collection
@@ -259,7 +261,7 @@ class DailyReportsPage:
         
         # Update totals
         self.monthly_totals_label.config(
-            text=f"التحصيل: {total_collection:,.2f} | المصاريف: {total_expenses:,.2f} | الباقي: {total_remaining:,.2f}"
+            text=f"التحصيل: {format_clean_number(total_collection)} | المصاريف: {format_clean_number(total_expenses)} | الباقي: {format_clean_number(total_remaining)}"
         )
         
         if not reports:

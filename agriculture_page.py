@@ -123,6 +123,7 @@ class AgricultureTransferPage:
         self.price_entry = make_entry(price_frame, self.price_var, width=12)
         self.price_entry.pack(side=tk.LEFT, padx=5)
         self.price_entry.bind('<Return>', self.on_price_enter)
+        self.price_entry.bind('<Tab>', self.on_price_enter)
         
         tk.Label(price_frame, text="السعر:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
@@ -137,8 +138,15 @@ class AgricultureTransferPage:
                                         font=self.fonts['entry'], width=25, justify='center')
         self.client_combo.pack(side=tk.LEFT, padx=5)
         self.client_combo.bind('<Return>', self.on_client_enter)
+        self.client_combo.bind('<Tab>', self.on_client_enter)
         self.client_combo.focus()
         
+        # زر تفاصيل النقلة
+        details_btn = tk.Button(client_frame, text="تفاصيل النقلة", command=self.open_shipment_details,
+                               font=('Playpen Sans Arabic', 12, 'bold'), bg=self.colors['accent'], fg='white',
+                               cursor='hand2', relief=tk.RAISED, bd=2)
+        details_btn.pack(side=tk.LEFT, padx=5)
+
         tk.Label(client_frame, text="اسم النقلة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
         
         # Item (Right)
@@ -152,6 +160,7 @@ class AgricultureTransferPage:
                                        font=self.fonts['entry'], width=15, justify='center')
         self.item_combo.pack(side=tk.LEFT, padx=5)
         self.item_combo.bind('<Return>', self.on_item_enter)
+        self.item_combo.bind('<Tab>', self.on_item_enter)
         
         def on_item_change(e=None):
             item_name = self.item_var.get()
@@ -165,17 +174,20 @@ class AgricultureTransferPage:
         tk.Label(item_frame, text="الصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
 
     def on_client_enter(self, event=None):
-        """When Enter is pressed in client field, move to item field"""
+        """When Enter/Tab is pressed in client field, move to item field"""
         self.item_combo.focus()
+        return "break"
         
     def on_item_enter(self, event=None):
-        """When Enter is pressed in item field, move to price field"""
+        """When Enter/Tab is pressed in item field, move to price field"""
         self.price_entry.focus()
+        return "break"
         
     def on_price_enter(self, event=None):
-        """When Enter is pressed in price field, move to first row - Count field"""
+        """When Enter/Tab is pressed in price field, move to first row - Count field"""
         if self.table_rows:
             self.table_rows[0][5].focus()  # Focus on Count field (first to input)
+        return "break"
 
     def create_table(self, parent):
         table_frame = tk.Frame(parent, bg=self.colors['bg'])
@@ -198,11 +210,15 @@ class AgricultureTransferPage:
         # Order (Right to Left): Item, Price, Client, Seller, Weight, Count
         headers = ['الصنف', 'سعر الكيلو', 'اسم النقلة', 'اسم البائع', 'الوزن', 'العدد']
         
+        # Define column weights: 0-Item, 1-Price, 2-Client, 3-Seller, 4-Weight, 5-Count
+        # Seller gets maximum space, Weight/Count get minimum
+        column_weights = [3, 3, 3, 30, 1, 1]
+
         for i, text in enumerate(headers):
             lbl = tk.Label(self.scrollable_frame, text=text, font=self.fonts['table'],
                           bg=self.col_colors[i], relief=tk.RAISED, bd=3, height=2)
             lbl.grid(row=0, column=i, sticky='nsew', padx=2, pady=2)
-            self.scrollable_frame.grid_columnconfigure(i, weight=1)
+            self.scrollable_frame.grid_columnconfigure(i, weight=column_weights[i])
             
         # Create first row only
         self.add_new_row()
@@ -220,7 +236,16 @@ class AgricultureTransferPage:
         
         row_widgets = []
         for col_idx in range(6):
-            e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx])
+            # Define specific width
+            # 3=Seller (Big), 4=Weight (Small), 5=Count (Small)
+            if col_idx == 3:
+                f_width = 40
+            elif col_idx in [4, 5]:
+                f_width = 5
+            else:
+                f_width = 18
+                
+            e = tk.Entry(self.scrollable_frame, **entry_style, bg=self.col_colors[col_idx], width=f_width)
             
             # Pre-fill item, price, and client name
             # Order: 0=Item, 1=Price, 2=Client, 3=Seller, 4=Weight, 5=Count
@@ -242,14 +267,17 @@ class AgricultureTransferPage:
             
             e.grid(row=row_num, column=col_idx, sticky='nsew', padx=2, pady=2, ipady=15)
             
-            # Bind Enter key to move to next field or save
+            # Bind Enter/Tab key to move to next field or save
             # Input Order: Count -> Weight -> Seller
             if col_idx == 5:  # Count (first to input)
                 e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_weight(idx))
+                e.bind('<Tab>', lambda ev, idx=row_num-1: self.move_to_weight(idx))
             elif col_idx == 4:  # Weight (second to input)
                 e.bind('<Return>', lambda ev, idx=row_num-1: self.move_to_seller(idx))
+                e.bind('<Tab>', lambda ev, idx=row_num-1: self.move_to_seller(idx))
             elif col_idx == 3:  # Seller name (last to input)
                 e.bind('<Return>', lambda ev, idx=row_num-1: self.save_current_row(idx))
+                e.bind('<Tab>', lambda ev, idx=row_num-1: self.save_current_row(idx))
             
             row_widgets.append(e)
         
@@ -263,11 +291,13 @@ class AgricultureTransferPage:
         """Move focus to weight field"""
         if row_idx < len(self.table_rows):
             self.table_rows[row_idx][4].focus()
+        return "break"
     
     def move_to_seller(self, row_idx):
         """Move focus to seller name field"""
         if row_idx < len(self.table_rows):
             self.table_rows[row_idx][3].focus()
+        return "break"
 
     def save_current_row(self, row_idx):
         """Save the current row and create a new one"""
@@ -374,5 +404,100 @@ class AgricultureTransferPage:
         for row in self.table_rows:
             for widget in row:
                 widget.destroy()
-        self.table_rows = []
-        self.add_new_row()
+    def open_shipment_details(self):
+        """Open a window to manage shipment totals and view progress"""
+        shipment_name = self.shipment_var.get().strip()
+        if not shipment_name:
+            messagebox.showwarning("تنبيه", "الرجاء اختيار أو كتابة اسم النقلة أولاً")
+            return
+            
+        # Create Popup
+        details_window = tk.Toplevel(self.window)
+        details_window.title(f"تفاصيل النقلة: {shipment_name}")
+        details_window.geometry("500x450")
+        details_window.configure(bg=self.colors['bg'])
+        
+        # Center Window
+        details_window.update_idletasks()
+        x = (details_window.winfo_screenwidth() // 2) - 250
+        y = (details_window.winfo_screenheight() // 2) - 225
+        details_window.geometry(f"500x450+{x}+{y}")
+        
+        # Data
+        details = self.db.get_shipment_details(shipment_name)
+        
+        total_w = details['total_weight'] if details else 0.0
+        total_c = details['total_count'] if details else 0.0
+        sold_w = details['sold_weight'] if details else 0.0
+        sold_c = details['sold_count'] if details else 0.0
+        
+        # --- UI Construction ---
+        
+        # 1. Total Inputs (Editable)
+        input_frame = tk.LabelFrame(details_window, text="إجمالي النقلة (الوارد)", font=self.fonts['label'], 
+                                   bg=self.colors['bg'], fg=self.colors['button_bg'], padx=20, pady=20)
+        input_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Total Weight
+        tk.Label(input_frame, text="الوزن الكلي:", font=('Arial', 14), bg=self.colors['bg']).grid(row=0, column=1, padx=5, pady=5, sticky='e')
+        entry_total_w = tk.Entry(input_frame, font=('Arial', 14), justify='center', width=15)
+        entry_total_w.grid(row=0, column=0, padx=5, pady=5)
+        entry_total_w.insert(0, str(total_w))
+        
+        # Total Count
+        tk.Label(input_frame, text="العدد الكلي:", font=('Arial', 14), bg=self.colors['bg']).grid(row=1, column=1, padx=5, pady=5, sticky='e')
+        entry_total_c = tk.Entry(input_frame, font=('Arial', 14), justify='center', width=15)
+        entry_total_c.grid(row=1, column=0, padx=5, pady=5)
+        entry_total_c.insert(0, str(total_c))
+        
+        # 2. Progress Display (Read-only)
+        stats_frame = tk.LabelFrame(details_window, text="حالة البيع (المنصرف)", font=self.fonts['label'], 
+                                   bg=self.colors['bg'], fg=self.colors['text_primary'], padx=20, pady=20)
+        stats_frame.pack(fill=tk.X, padx=20, pady=5)
+        
+        # Headers
+        tk.Label(stats_frame, text="المباع", font=('Arial', 12, 'bold'), bg=self.colors['bg'], fg='green').grid(row=0, column=1, padx=20)
+        tk.Label(stats_frame, text="المتبقي", font=('Arial', 12, 'bold'), bg=self.colors['bg'], fg='red').grid(row=0, column=0, padx=20)
+        
+        # Labels
+        tk.Label(stats_frame, text="الوزن:", font=('Arial', 12, 'bold'), bg=self.colors['bg']).grid(row=1, column=2, sticky='e', pady=10)
+        tk.Label(stats_frame, text="العدد:", font=('Arial', 12, 'bold'), bg=self.colors['bg']).grid(row=2, column=2, sticky='e', pady=10)
+        
+        # Values
+        lbl_sold_w = tk.Label(stats_frame, text=f"{sold_w}", font=('Arial', 14), bg=self.colors['bg'], fg='green')
+        lbl_sold_w.grid(row=1, column=1)
+        
+        lbl_rem_w = tk.Label(stats_frame, text=f"{total_w - sold_w}", font=('Arial', 14), bg=self.colors['bg'], fg='red')
+        lbl_rem_w.grid(row=1, column=0)
+        
+        lbl_sold_c = tk.Label(stats_frame, text=f"{sold_c}", font=('Arial', 14), bg=self.colors['bg'], fg='green')
+        lbl_sold_c.grid(row=2, column=1)
+        
+        lbl_rem_c = tk.Label(stats_frame, text=f"{total_c - sold_c}", font=('Arial', 14), bg=self.colors['bg'], fg='red')
+        lbl_rem_c.grid(row=2, column=0)
+        
+        # Save Function
+        def save_details():
+            try:
+                new_w = float(entry_total_w.get())
+                new_c = float(entry_total_c.get())
+                
+                self.db.save_shipment_details(shipment_name, new_w, new_c)
+                
+                # Update Labels
+                current_rem_w = new_w - sold_w
+                current_rem_c = new_c - sold_c
+                
+                lbl_rem_w.config(text=f"{current_rem_w}")
+                lbl_rem_c.config(text=f"{current_rem_c}")
+                
+                messagebox.showinfo("نجاح", "تم حفظ بيانات النقلة بنجاح", parent=details_window)
+                details_window.destroy()
+                
+            except ValueError:
+                messagebox.showerror("خطأ", "الرجاء إدخال أرقام صحيحة", parent=details_window)
+        
+        # Save Button
+        tk.Button(details_window, text="حفظ التعديلات", command=save_details, 
+                 font=self.fonts['button'], bg=self.colors['button_bg'], fg='white', 
+                 cursor='hand2', width=20).pack(pady=20)

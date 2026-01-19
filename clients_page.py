@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from database import Database
-from utils import ColorManager
+from utils import ColorManager, format_clean_number
 from datetime import datetime
 from ready_invoices_page import ReadyInvoicesPage
 
@@ -31,7 +31,9 @@ class ClientsPage:
             '#AED6F1', # Price (Blue-ish)
             '#A9DFBF', # Weight (Green-ish)
             '#D7BDE2', # Count (Purple-ish)
-            '#E5E7E9'  # Total (Grey-ish)
+            '#E5E7E9', # Total (Grey-ish)
+            '#FCF3CF', # Date (Light Yellow)
+            '#D6EAF8'  # Equip (Light Blue)
         ]
         
         self.window = tk.Toplevel(parent_window)
@@ -107,8 +109,19 @@ class ClientsPage:
         filter_combo.bind('<<ComboboxSelected>>', self.filter_table)
         filter_combo.current(0)
         
-        # Left: Title
-        tk.Label(controls, text="إدارة حسابات وفواتير العملاء", font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=20)
+
+
+        # New Buttons
+        btns_frame = tk.Frame(controls, bg=self.colors['header_bg'])
+        btns_frame.pack(side=tk.LEFT, padx=10)
+        
+        btn_font = ('Simplified Arabic', 12, 'bold')
+        
+        tk.Button(btns_frame, text="فواتير العملاء الجاهزة", command=self.show_ready_invoices, 
+                 font=btn_font, bg='#27AE60', fg='white', relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+                 
+        tk.Button(btns_frame, text="فواتير العملاء المضافة", command=self.show_added_invoices, 
+                 font=btn_font, bg='#E67E22', fg='white', relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
 
     def create_table(self, parent):
         table_frame = tk.Frame(parent, bg=self.colors['bg'])
@@ -132,8 +145,8 @@ class ClientsPage:
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Headers
-        headers = ['اسم العميل', 'اسم البائع', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد', 'الإجمالي']
+        # Headers - Left to Right (so it appears Right to Left visually: Client at Right)
+        headers = ['العدة', 'التاريخ', 'الإجمالي', 'سعر الوحدة', 'الوزن', 'الصنف', 'العدد', 'اسم البائع', 'اسم العميل']
         
         for i, text in enumerate(headers):
             lbl = tk.Label(
@@ -217,7 +230,7 @@ class ClientsPage:
         for i in range(total_rows):
             row_data = filtered_data[i] if i < len(filtered_data) else None
             
-            vals = ["", "", "", "", "", "", ""]
+            vals = ["", "", "", "", "", "", "", "", ""]
             row_id = None
             
             if row_data:
@@ -229,14 +242,19 @@ class ClientsPage:
                 if weight > 0: total = weight * price
                 elif count > 0: total = count * price
                 
+                # Equip, Date, Total, Price, Weight, Item, Count, Seller, Client
+                date_str = row_data[9].split(' ')[0] if row_data[9] else ""
+                
                 vals = [
-                    row_data[1], # Client (Shipment)
-                    row_data[2], # Seller
+                    row_data[7] or "", # Equip
+                    date_str,          # Date
+                    format_clean_number(total), # Total
+                    format_clean_number(row_data[4]), # Price
+                    format_clean_number(row_data[5]), # Weight
                     row_data[3], # Item
-                    row_data[4], # Price
-                    row_data[5], # Weight
-                    row_data[6], # Count
-                    f"{total:.2f}" # Total
+                    format_clean_number(row_data[6]), # Count
+                    row_data[2], # Seller
+                    row_data[1]  # Client
                 ]
                 row_id = row_data[0]
             
@@ -473,31 +491,57 @@ class ClientsPage:
         load_clients()
     
     def open_client_transfers_page(self, client_name):
-        """صفحة عرض نقلات العميل مع إمكانية إنشاء فاتورة"""
+        """صفحة عرض نقلات العميل مع إمكانية إنشاء فاتورة - مجمعة حسب التاريخ"""
         transfers_window = tk.Toplevel(self.window)
         transfers_window.title(f"نقلات العميل: {client_name}")
-        transfers_window.geometry("1200x700")
+        transfers_window.geometry("1200x750")
         transfers_window.configure(bg=self.colors['bg'])
         
-        # Title
-        title_frame = tk.Frame(transfers_window, bg=self.colors['header_bg'], height=60)
+        # Title & Date Filter Bar
+        title_frame = tk.Frame(transfers_window, bg=self.colors['header_bg'], height=100)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
-        tk.Label(title_frame, text=f"نقلات العميل: {client_name}", font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(pady=15)
         
-        # Table Frame
-        table_frame = tk.Frame(transfers_window, bg=self.colors['bg'])
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        tk.Label(title_frame, text=f"نقلات العميل: {client_name}", 
+                font=self.fonts['header'], bg=self.colors['header_bg'], fg='white').pack(pady=10)
+        
+        # Date Filter
+        filter_frame = tk.Frame(title_frame, bg=self.colors['header_bg'])
+        filter_frame.pack(pady=5)
+        
+        tk.Label(filter_frame, text="اختر التاريخ:", font=('Arial', 12, 'bold'), 
+                bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=10)
+        
+        # Get all unique dates for this client
+        all_transfers = self.db.get_agriculture_transfers()
+        client_transfers = [t for t in all_transfers if t[1] == client_name and t[8] == 'in']
+        
+        # Extract unique dates (assuming created_at is at index 9)
+        unique_dates = set()
+        for t in client_transfers:
+            if t[9]:
+                date_part = t[9].split(' ')[0]  # Extract YYYY-MM-DD
+                unique_dates.add(date_part)
+        
+        sorted_dates = sorted(list(unique_dates), reverse=True)
+        
+        selected_date_var = tk.StringVar()
+        date_combo = ttk.Combobox(filter_frame, textvariable=selected_date_var, 
+                                 values=['الكل'] + sorted_dates, 
+                                 font=('Arial', 12), width=15, justify='center', state='readonly')
+        date_combo.pack(side=tk.RIGHT, padx=5)
+        date_combo.current(0)
+        
+        # Table Container
+        table_container = tk.Frame(transfers_window, bg=self.colors['bg'])
+        table_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
         # Canvas for scrolling
-        canvas = tk.Canvas(table_frame, bg=self.colors['bg'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=canvas.yview)
+        canvas = tk.Canvas(table_container, bg=self.colors['bg'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(table_container, orient=tk.VERTICAL, command=canvas.yview)
         
         scrollable_frame = tk.Frame(canvas, bg=self.colors['bg'])
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         
         canvas_frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.bind('<Configure>', lambda e: canvas.itemconfig(canvas_frame_id, width=e.width))
@@ -507,93 +551,118 @@ class ClientsPage:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Headers
-        headers = ['البائع', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد', 'العدة', 'الإجمالي']
-        header_colors = ['#F5CBA7', '#F9E79F', '#F5B7B1', '#AED6F1', '#A9DFBF', '#D7BDE2', '#E5E7E9']
-        
-        for i, text in enumerate(headers):
-            lbl = tk.Label(
-                scrollable_frame, 
-                text=text, 
-                font=('Playpen Sans Arabic', 16, 'bold'),
-                bg=header_colors[i],
-                relief=tk.RAISED,
-                bd=2,
-                height=2
-            )
-            lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
-            scrollable_frame.grid_columnconfigure(i, weight=1)
-        
-        # Get client transfers
-        all_transfers = self.db.get_agriculture_transfers()
-        client_transfers = [t for t in all_transfers if t[1] == client_name and t[8] == 'in']
-        
-        # Store selected transfer
-        selected_transfer = {'id': None, 'widgets': []}
-        
-        def on_transfer_click(transfer_id, row_widgets):
-            """تحديد النقلة عند النقر عليها"""
-            # Reset previous selection
-            for widget in selected_transfer['widgets']:
-                col_idx = widget.grid_info()['column']
-                widget.config(bg=header_colors[col_idx])
+        def load_transfers_by_date():
+            """Load and display transfers grouped by date"""
+            # Clear existing widgets
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
             
-            # Highlight selected row
-            selected_transfer['id'] = transfer_id
-            selected_transfer['widgets'] = row_widgets
-            for widget in row_widgets:
-                widget.config(bg='#D5F5E3')
-        
-        # Create rows
-        entry_style = {'font': ('Playpen Sans Arabic', 14), 'relief': tk.SUNKEN, 'bd': 1, 'justify': 'center'}
-        
-        for idx, transfer in enumerate(client_transfers):
-            # transfer: id, shipment, seller, item, price, weight, count, equipment, type
-            price = transfer[4] or 0
-            weight = transfer[5] or 0
-            count = transfer[6] or 0
-            equipment = transfer[7] or ""
+            selected_date = selected_date_var.get()
             
-            # Calculate total
-            total = 0
-            if weight > 0:
-                total = weight * price
-            elif count > 0:
-                total = count * price
+            # Filter transfers by selected date
+            if selected_date == 'الكل':
+                filtered_transfers = client_transfers
+            else:
+                filtered_transfers = [t for t in client_transfers if t[9] and t[9].startswith(selected_date)]
             
-            vals = [
-                transfer[2],  # Seller
-                transfer[3],  # Item
-                f"{price:.2f}",
-                f"{weight:.2f}",
-                f"{count:.0f}",
-                equipment,
-                f"{total:.2f}"
-            ]
+            # Group by date
+            from collections import defaultdict
+            grouped_data = defaultdict(list)
             
-            row_widgets = []
-            for col_idx, val in enumerate(vals):
-                e = tk.Entry(scrollable_frame, **entry_style, bg=header_colors[col_idx])
-                e.insert(0, str(val))
-                e.config(state='readonly')
-                e.grid(row=idx+1, column=col_idx, sticky='nsew', padx=1, pady=1, ipady=8)
+            for t in filtered_transfers:
+                if t[9]:
+                    date_part = t[9].split(' ')[0]
+                else:
+                    date_part = "بدون تاريخ"
+                grouped_data[date_part].append(t)
+            
+            # Sort dates descending
+            sorted_dates_list = sorted(grouped_data.keys(), reverse=True)
+            
+            # Display grouped transfers
+            for date_str in sorted_dates_list:
+                day_frame = tk.LabelFrame(scrollable_frame, text=f" 📅 {date_str} ", 
+                                         font=('Playpen Sans Arabic', 14, 'bold'), 
+                                         bg=self.colors['bg'], fg='#2C3E50', 
+                                         labelanchor='ne', padx=10, pady=10)
+                day_frame.pack(fill=tk.X, pady=10, padx=5)
                 
-                transfer_id = transfer[0]
-                e.bind('<Button-1>', lambda event, tid=transfer_id, rw=None: on_transfer_click(tid, rw if rw else event.widget.master.grid_slaves(row=event.widget.grid_info()['row'])))
+                # Headers for this day
+                headers = ['البائع', 'الصنف', 'سعر الوحدة', 'الوزن', 'العدد', 'العدة', 'الإجمالي']
+                header_colors = ['#F5CBA7', '#F9E79F', '#F5B7B1', '#AED6F1', '#A9DFBF', '#D7BDE2', '#E5E7E9']
                 
-                row_widgets.append(e)
+                for i, h in enumerate(headers):
+                    lbl = tk.Label(day_frame, text=h, font=('Arial', 12, 'bold'), 
+                                  bg=self.colors['button_bg'], fg='white', relief=tk.FLAT, pady=8)
+                    lbl.grid(row=0, column=i, sticky='ew', padx=1)
+                    day_frame.grid_columnconfigure(i, weight=1)
+                
+                # Rows for this day
+                daily_transfers = grouped_data[date_str]
+                day_total = 0
+                
+                for idx, transfer in enumerate(daily_transfers):
+                    # transfer: id, shipment, seller, item, price, weight, count, equipment, type, created_at
+                    price = transfer[4] or 0
+                    weight = transfer[5] or 0
+                    count = transfer[6] or 0
+                    equipment = transfer[7] or ""
+                    
+                    # Calculate total
+                    total = 0
+                    if weight > 0:
+                        total = weight * price
+                    elif count > 0:
+                        total = count * price
+                    
+                    day_total += total
+                    
+                    vals = [
+                        transfer[2],  # Seller
+                        transfer[3],  # Item
+                        f"{price:.2f}",
+                        f"{weight:.2f}",
+                        f"{count:.0f}",
+                        equipment,
+                        f"{total:.2f}"
+                    ]
+                    
+                    for col_i, val in enumerate(vals):
+                        bg_color = "white" if idx % 2 == 0 else "#FDF2E9"
+                        lbl = tk.Label(day_frame, text=str(val), font=('Arial', 11), 
+                                      bg=bg_color, relief=tk.SOLID, bd=1, pady=5)
+                        lbl.grid(row=idx+1, column=col_i, sticky='ew', padx=1, pady=1)
+                
+                # Day Total Row
+                total_row_idx = len(daily_transfers) + 1
+                tk.Label(day_frame, text=f"إجمالي اليوم: {day_total:,.2f} جنيه", 
+                        font=('Arial', 12, 'bold'), bg='#F1C40F', fg='black', 
+                        relief=tk.RAISED, bd=2, pady=8).grid(row=total_row_idx, column=0, 
+                                                             columnspan=len(headers), sticky='ew', pady=5)
+        
+        # Initial load
+        load_transfers_by_date()
+        
+        # Bind date filter change
+        date_combo.bind('<<ComboboxSelected>>', lambda e: load_transfers_by_date())
         
         # Bottom buttons
         btn_frame = tk.Frame(transfers_window, bg=self.colors['bg'], pady=10)
         btn_frame.pack(fill=tk.X)
         
         def create_invoice_from_transfer():
-            """إنشاء فاتورة لكل النقلات غير المفوترة للعميل"""
-            # Get all uninvoiced transfers for this client
+            """إنشاء فاتورة للتاريخ المحدد أو الكل"""
+            selected_date = selected_date_var.get()
+            
+            # Get uninvoiced transfers
             uninvoiced_transfers = self.db.get_uninvoiced_transfers(client_name)
             
+            # Filter by selected date if not 'الكل'
+            if selected_date != 'الكل':
+                uninvoiced_transfers = [t for t in uninvoiced_transfers if t[9] and t[9].startswith(selected_date)]
+            
             if not uninvoiced_transfers:
-                messagebox.showwarning("تنبيه", "لا توجد نقلات غير مفوترة لهذا العميل")
+                messagebox.showwarning("تنبيه", "لا توجد نقلات غير مفوترة للتاريخ المحدد")
                 return
             
             # Open Dialog to enter deductions
@@ -608,7 +677,9 @@ class ClientsPage:
             y = (dialog.winfo_screenheight() // 2) - 225
             dialog.geometry(f"500x450+{x}+{y}")
             
-            tk.Label(dialog, text=f"إنشاء فاتورة لـ {len(uninvoiced_transfers)} نقلة", font=('Playpen Sans Arabic', 16, 'bold'), bg=self.colors['bg']).pack(pady=15)
+            date_info = f"للتاريخ: {selected_date}" if selected_date != 'الكل' else "لكل التواريخ"
+            tk.Label(dialog, text=f"إنشاء فاتورة لـ {len(uninvoiced_transfers)} نقلة\n{date_info}", 
+                    font=('Playpen Sans Arabic', 14, 'bold'), bg=self.colors['bg']).pack(pady=15)
             
             form_frame = tk.Frame(dialog, bg=self.colors['bg'])
             form_frame.pack(pady=10, padx=20, fill=tk.X)
@@ -622,7 +693,6 @@ class ClientsPage:
                 tk.Label(row, text=label_text, font=('Arial', 12, 'bold'), bg=self.colors['bg'], width=15, anchor='e').pack(side=tk.RIGHT)
                 
                 if is_percent:
-                    # Frame for entry and % sign
                     p_frame = tk.Frame(row, bg=self.colors['bg'])
                     p_frame.pack(side=tk.RIGHT, expand=True, fill=tk.X)
                     
@@ -643,13 +713,11 @@ class ClientsPage:
             create_row("نقدية", "cash")
             
             def confirm():
-                # Collect data
                 deductions = {}
                 try:
                     deductions['nolon'] = entries['nolon'].get().strip() or "0"
                     
                     comm_val = entries['commission'].get().strip() or "0"
-                    # Add % if not present, since user sees the % label
                     if '%' not in comm_val:
                         deductions['commission'] = comm_val + "%"
                     else:
@@ -660,21 +728,16 @@ class ClientsPage:
                     deductions['cash'] = entries['cash'].get().strip() or "0"
                     
                     dialog.destroy()
-                    
-                    # Prepare data for invoice page (pass list of transfers)
-                    # Each transfer: id, shipment_name, seller_name, item_name, unit_price, weight, count, equipment, transfer_type
-                    
-                    # Open invoice page with deductions and list of transfers
                     ReadyInvoicesPage(transfers_window, transfer_data=uninvoiced_transfers, deductions=deductions, is_multi=True)
                     
                 except Exception as e:
                     messagebox.showerror("خطأ", f"حدث خطأ: {e}")
 
-            btn_frame = tk.Frame(dialog, bg=self.colors['bg'])
-            btn_frame.pack(pady=20)
+            btn_frame_dialog = tk.Frame(dialog, bg=self.colors['bg'])
+            btn_frame_dialog.pack(pady=20)
             
-            tk.Button(btn_frame, text="موافق", command=confirm, font=self.fonts['button'], bg='#27AE60', fg='white', width=15).pack(side=tk.RIGHT, padx=10)
-            tk.Button(btn_frame, text="إلغاء", command=dialog.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.LEFT, padx=10)
+            tk.Button(btn_frame_dialog, text="موافق", command=confirm, font=self.fonts['button'], bg='#27AE60', fg='white', width=15).pack(side=tk.RIGHT, padx=10)
+            tk.Button(btn_frame_dialog, text="إلغاء", command=dialog.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.LEFT, padx=10)
         
         def show_invoices():
             """عرض الفواتير السابقة للعميل"""
@@ -683,14 +746,11 @@ class ClientsPage:
             invoices_window.geometry("1000x600")
             invoices_window.configure(bg=self.colors['bg'])
             
-            # Title
             tk.Label(invoices_window, text=f"سجل فواتير العميل: {client_name}", font=self.fonts['header'], bg=self.colors['bg']).pack(pady=15)
             
-            # List Frame
             list_frame = tk.Frame(invoices_window, bg=self.colors['bg'])
             list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
             
-            # Treeview
             cols = ('id', 'date', 'total', 'net', 'deductions')
             tree = ttk.Treeview(list_frame, columns=cols, show='headings', height=15)
             
@@ -718,15 +778,12 @@ class ClientsPage:
                 
                 invoices = self.db.get_client_invoices(client_name)
                 for inv in invoices:
-                    # id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total
                     inv_id = inv[0]
                     date = inv[7]
                     net = inv[8] or 0
                     final = inv[9] or 0
                     
-                    # Calculate total deductions
                     nolon = inv[2] or 0
-                    # Commission might be string with %
                     comm_str = str(inv[3])
                     if '%' in comm_str:
                         comm_pct = float(comm_str.replace('%', '').strip())
@@ -752,7 +809,6 @@ class ClientsPage:
                 
                 invoice_id = int(selected[0])
                 
-                # Get invoice details
                 invoices = self.db.get_client_invoices(client_name)
                 selected_inv = None
                 for inv in invoices:
@@ -763,14 +819,12 @@ class ClientsPage:
                 if not selected_inv:
                     return
 
-                # Get linked transfers
                 transfers = self.db.get_transfers_by_invoice_id(invoice_id)
                 
                 if not transfers:
                     messagebox.showwarning("تنبيه", "لا توجد نقلات مرتبطة بهذه الفاتورة")
                     return
                 
-                # Prepare deductions dict
                 deductions = {
                     'nolon': str(selected_inv[2]),
                     'commission': str(selected_inv[3]),
@@ -779,16 +833,199 @@ class ClientsPage:
                     'cash': str(selected_inv[6])
                 }
                 
-                # Open ReadyInvoicesPage
                 ReadyInvoicesPage(invoices_window, transfer_data=transfers, deductions=deductions, is_multi=True, invoice_id=invoice_id)
 
-            # Buttons
-            btn_frame = tk.Frame(invoices_window, bg=self.colors['bg'], pady=10)
-            btn_frame.pack(fill=tk.X)
+            btn_frame_inv = tk.Frame(invoices_window, bg=self.colors['bg'], pady=10)
+            btn_frame_inv.pack(fill=tk.X)
             
-            tk.Button(btn_frame, text="عرض / تعديل الفاتورة", command=open_selected_invoice, font=self.fonts['button'], bg='#3498DB', fg='white', width=20).pack(side=tk.TOP, pady=5)
-            tk.Button(btn_frame, text="إغلاق", command=invoices_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.BOTTOM, pady=5)
+            tk.Button(btn_frame_inv, text="عرض / تعديل الفاتورة", command=open_selected_invoice, font=self.fonts['button'], bg='#3498DB', fg='white', width=20).pack(side=tk.TOP, pady=5)
+            tk.Button(btn_frame_inv, text="إغلاق", command=invoices_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=15).pack(side=tk.BOTTOM, pady=5)
 
         tk.Button(btn_frame, text="عرض الفواتير السابقة", command=show_invoices, font=self.fonts['button'], bg='#3498DB', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
-        tk.Button(btn_frame, text="إنشاء فاتورة مجمعة", command=create_invoice_from_transfer, font=self.fonts['button'], bg='#27AE60', fg='white', width=18, height=2).pack(side=tk.RIGHT, padx=10)
+        tk.Button(btn_frame, text="إنشاء فاتورة للتاريخ المحدد", command=create_invoice_from_transfer, font=self.fonts['button'], bg='#27AE60', fg='white', width=20, height=2).pack(side=tk.RIGHT, padx=10)
         tk.Button(btn_frame, text="إغلاق", command=transfers_window.destroy, font=self.fonts['button'], bg='#C0392B', fg='white', width=18, height=2).pack(side=tk.LEFT, padx=10)
+
+    def show_ready_invoices(self):
+        """إنشاء فاتورة مجمعة لكل نقلات العميل في التاريخ المحدد بناءً على الاختيار"""
+        if not self.selected_transfer_id:
+            messagebox.showwarning("تنبيه", "الرجاء اختيار نقلة من الجدول أولاً لتحديد العميل والتاريخ")
+            return
+            
+        # جلب بيانات النقلة المختارة
+        selected_transfer = self.db.get_transfer_by_id(self.selected_transfer_id)
+        if not selected_transfer:
+            messagebox.showerror("خطأ", "لم يتم العثور على النقلة")
+            return
+            
+        client_name = selected_transfer[1]
+        created_at = selected_transfer[9]
+        if not created_at:
+            messagebox.showwarning("تنبيه", "النقلة المختارة لا تحتوي على تاريخ")
+            return
+            
+        target_date = created_at.split(' ')[0]
+        
+        # جلب كل نقلات العميل في نفس التاريخ
+        all_transfers = self.db.get_agriculture_transfers()
+        daily_transfers = [t for t in all_transfers if t[1] == client_name and t[8] == 'in' and t[9] and t[9].startswith(target_date)]
+        
+        if not daily_transfers:
+            messagebox.showinfo("تنبيه", f"لا توجد نقلات مسجلة للعميل {client_name} في تاريخ {target_date}")
+            return
+
+        # سؤال المستخدم عن الخصومات قبل إنشاء الفاتورة (Nolon, Commission, etc.)
+        self.ask_for_invoice_deductions(client_name, target_date, daily_transfers)
+
+    def ask_for_invoice_deductions(self, client_name, date_str, transfers):
+        """نافذة صغيرة لإدخال الخصومات قبل فتح صفحة الفاتورة"""
+        dialog = tk.Toplevel(self.window)
+        dialog.title("بيانات الفاتورة المجمعة")
+        dialog.geometry("500x450")
+        dialog.configure(bg=self.colors['bg'])
+        
+        # Center dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - 250
+        y = (dialog.winfo_screenheight() // 2) - 225
+        dialog.geometry(f"500x450+{x}+{y}")
+        
+        tk.Label(dialog, text=f"إنشاء فاتورة لـ {client_name}\nبتاريخ: {date_str}\n(عدد النقلات: {len(transfers)})", 
+                font=('Playpen Sans Arabic', 14, 'bold'), bg=self.colors['bg']).pack(pady=15)
+        
+        form_frame = tk.Frame(dialog, bg=self.colors['bg'])
+        form_frame.pack(pady=10, padx=20, fill=tk.X)
+        
+        entries = {}
+        def create_row(label_text, key, default="0"):
+            row = tk.Frame(form_frame, bg=self.colors['bg'])
+            row.pack(fill=tk.X, pady=5)
+            tk.Label(row, text=label_text, font=('Arial', 12, 'bold'), bg=self.colors['bg'], width=15, anchor='e').pack(side=tk.RIGHT)
+            entry = tk.Entry(row, font=('Arial', 12), justify='center')
+            entry.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+            entry.insert(0, default)
+            entries[key] = entry
+
+        create_row("نولون", "nolon")
+        create_row("العمولة (%)", "commission", "10")
+        create_row("مشال", "mashal")
+        create_row("إيجار عدة", "rent")
+        create_row("نقدية", "cash")
+        
+        def confirm():
+            deductions = {
+                'nolon': entries['nolon'].get().strip() or "0",
+                'commission': entries['commission'].get().strip() + "%",
+                'mashal': entries['mashal'].get().strip() or "0",
+                'rent': entries['rent'].get().strip() or "0",
+                'cash': entries['cash'].get().strip() or "0"
+            }
+            dialog.destroy()
+            # فتح صفحة الفاتورة الجاهزة
+            ReadyInvoicesPage(self.window, transfer_data=transfers, deductions=deductions, is_multi=True)
+
+        tk.Button(dialog, text="تأكيد وإنشاء الفاتورة", command=confirm, 
+                 font=self.fonts['button'], bg='#27AE60', fg='white', width=20).pack(pady=20)
+
+    def show_added_invoices(self):
+        """عرض سجل الفواتير التي تم حفظها مسبقاً"""
+        self.show_all_invoices_window("سجل فواتير العملاء المضافة (المحفوظة)")
+
+    def show_all_invoices_window(self, title):
+        win = tk.Toplevel(self.window)
+        win.title(title)
+        win.geometry("1100x650")
+        win.configure(bg=self.colors['bg'])
+        
+        tk.Label(win, text=title, font=self.fonts['header'], bg=self.colors['bg']).pack(pady=15)
+        
+        # List
+        list_frame = tk.Frame(win, bg='white')
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        cols = ('inv_id', 'client', 'date', 'total', 'net', 'deductions')
+        tree = ttk.Treeview(list_frame, columns=cols, show='headings', height=15)
+        
+        tree.heading('inv_id', text='رقم الفاتورة')
+        tree.heading('client', text='العميل')
+        tree.heading('date', text='التاريخ')
+        tree.heading('total', text='الصافي النهائي')
+        tree.heading('net', text='إجمالي البضاعة')
+        tree.heading('deductions', text='الخصومات')
+        
+        tree.column('inv_id', width=80, anchor='center')
+        tree.column('client', width=200, anchor='center')
+        tree.column('date', width=120, anchor='center')
+        tree.column('total', width=120, anchor='center')
+        tree.column('net', width=120, anchor='center')
+        tree.column('deductions', width=120, anchor='center')
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Load
+        invoices = self.db.get_all_client_invoices()
+        for inv in invoices:
+            # id, owner_name, nolon, commission, mashal, rent, cash, invoice_date, net_amount, final_total
+            inv_id = inv[0]
+            client = inv[1]
+            date = inv[7]
+            net = inv[8] or 0
+            final = inv[9] or 0
+            
+            # deductions calc
+            nolon = inv[2] or 0
+            comm_str = str(inv[3])
+            commission = 0
+            if '%' in comm_str:
+                try:
+                    pct = float(comm_str.replace('%', ''))
+                    commission = (net * pct) / 100
+                except: pass
+            else:
+                try: commission = float(comm_str)
+                except: pass
+            
+            mashal = inv[4] or 0
+            rent = inv[5] or 0
+            cash = inv[6] or 0
+            
+            deductions = nolon + commission + mashal + rent + cash
+            
+            tree.insert('', tk.END, values=(inv_id, client, date, format_clean_number(final), format_clean_number(net), format_clean_number(deductions)), iid=inv_id)
+            
+        def open_details():
+            selected = tree.selection()
+            if not selected:
+                 messagebox.showwarning("تنبيه", "اختر فاتورة")
+                 return
+            
+            inv_id = int(selected[0])
+            
+            selected_inv = None
+            for inv in invoices:
+                if inv[0] == inv_id:
+                     selected_inv = inv
+                     break
+            
+            if not selected_inv: return
+
+            transfers = self.db.get_transfers_by_invoice_id(inv_id)
+            
+            deductions = {
+                'nolon': str(selected_inv[2]),
+                'commission': str(selected_inv[3]),
+                'mashal': str(selected_inv[4]),
+                'rent': str(selected_inv[5]),
+                'cash': str(selected_inv[6])
+            }
+            
+            ReadyInvoicesPage(win, transfer_data=transfers, deductions=deductions, is_multi=True, invoice_id=inv_id)
+
+        # Buttons
+        btn_frame = tk.Frame(win, bg=self.colors['bg'])
+        btn_frame.pack(pady=10)
+        
+        tk.Button(btn_frame, text="عرض/تعديل التفاصيل", command=open_details, 
+                 font=self.fonts['button'], bg=self.colors['button_bg'], fg='white').pack(side=tk.TOP)

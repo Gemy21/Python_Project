@@ -1,0 +1,104 @@
+{
+  "export_date": "2026-01-14T18:10:42.226867",
+  "database_name": "company_accounts.db",
+  "tables": {
+    "sellers_accounts": {
+      "columns": [
+        "id",
+        "seller_name",
+        "phone",
+        "remaining_amount",
+        "total_credit",
+        "created_at",
+        "updated_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "seller_transactions": {
+      "columns": [
+        "id",
+        "seller_id",
+        "amount",
+        "status",
+        "count",
+        "weight",
+        "price",
+        "item_name",
+        "date",
+        "day_name",
+        "equipment",
+        "note",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "inventory_items": {
+      "columns": [
+        "id",
+        "name",
+        "quantity",
+        "price",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "meals": {
+      "columns": [
+        "id",
+        "name",
+        "price_per_kg",
+        "equipment_weight",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "agriculture_transfers": {
+      "columns": [
+        "id",
+        "shipment_name",
+        "seller_name",
+        "item_name",
+        "unit_price",
+        "weight",
+        "count",
+        "equipment",
+        "transfer_type",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "expenses": {
+      "columns": [
+        "id",
+        "description",
+        "amount",
+        "expense_date",
+        "note",
+        "created_at"
+      ],
+      "data": [],
+      "row_count": 0
+    },
+    "client_invoices": {
+      "columns": [
+        "id",
+        "owner_name",
+        "nolon",
+        "commission",
+        "mashal",
+        "rent",
+        "cash",
+        "invoice_date",
+        "created_at",
+        "updated_at"
+      ],
+      "data": [],
+      "row_count": 0
+    }
+  }
+}

@@ -46,3 +46,29 @@ class ColorManager:
             # Additional colors available if needed
             'light_orange': self.palette['light_orange']
         }
+
+def format_clean_number(value):
+    """
+    يقوم بتنسيق الرقم لإزالة الأصفار العشرية غير الضرورية وإضافة فاصلة الآلاف.
+    مثال: 100.00 تصبح 100، 50.50 تصبح 50.5
+    """
+    if value is None or value == "":
+        return "0"
+    try:
+        # تحويل القيمة لرقم حقيقي
+        num = float(value)
+        
+        if num == 0:
+            return "0"
+            
+        # إذا كان الرقم صحيحاً (بدون كسور)
+        if num == int(num):
+            return f"{int(num):,}"
+        
+        # إذا كان به كسور، نظهر رقمين عشريين ونحذف الأصفار الزائدة من اليمين
+        formatted = f"{num:,.2f}"
+        if "." in formatted:
+            formatted = formatted.rstrip('0').rstrip('.')
+        return formatted
+    except (ValueError, TypeError):
+        return str(value)

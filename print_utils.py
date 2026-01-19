@@ -275,10 +275,20 @@ class PrintPreviewWindow:
             printers = [p[2] for p in printers_info]
             
             default_printer = win32print.GetDefaultPrinter()
-        except Exception as e:
-            print(f"Error listing printers: {e}")
+            default_printer = win32print.GetDefaultPrinter()
+        except ImportError:
+            messagebox.showerror("خطأ", "مكتبة win32print غير مثبتة.\nلا يمكن الطباعة المباشرة.")
             printers = []
             default_printer = ""
+        except Exception as e:
+            messagebox.showerror("خطأ في الطابعات", f"حدث خطأ أثناء البحث عن الطابعات:\n{str(e)}\n\nتأكد من توصيل الطابعة وتعريفها على الويندوز.")
+            printers = []
+            default_printer = ""
+        
+        # إضافة خيار PDF دائماً للطوارئ إذا أردنا، أو الاعتماد على زر حفظ PDF المنفصل
+        # لكن المستخدم يريد الطباعة المباشرة.
+        if not printers:
+             printers = ["Microsoft Print to PDF"] # محاولة افتراضية
             
         if printers:
             self.printer_combo = ttk.Combobox(buttons_frame, textvariable=self.printer_var, values=printers, state='readonly', width=25, font=('Arial', 10))
