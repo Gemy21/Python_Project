@@ -100,119 +100,135 @@ class StartMenu:
                 self.canvas.itemconfig(self.bg_image_id, image=self.bg_image)
     
     def create_buttons(self):
-        """إنشاء أزرار القائمة الرئيسية في الجانب الأيسر"""
-        # إزالة أي أزرار قديمة
-        for btn in getattr(self, "menu_buttons", []):
-            btn.destroy()
-        for wrapper in getattr(self, "menu_button_wrappers", []):
-            wrapper.destroy()
-        for btn in getattr(self, "bottom_buttons", []):
-            btn.destroy()
-        for wrapper in getattr(self, "bottom_button_wrappers", []):
-            wrapper.destroy()
-        if getattr(self, "bottom_buttons_frame", None):
-            self.bottom_buttons_frame.destroy()
+        """إنشاء أزرار القائمة الرئيسية بتصميم عصري"""
+        # تنظيف الأزرار القديمة
+        for btn in getattr(self, "menu_buttons", []): btn.destroy()
+        for wrapper in getattr(self, "menu_button_wrappers", []): wrapper.destroy()
+        for btn in getattr(self, "bottom_buttons", []): btn.destroy()
+        for wrapper in getattr(self, "bottom_button_wrappers", []): wrapper.destroy()
+        if getattr(self, "bottom_buttons_frame", None): self.bottom_buttons_frame.destroy()
+        if hasattr(self, "exit_wrapper"): self.exit_wrapper.destroy()
 
         self.menu_buttons = []
         self.menu_button_wrappers = []
         self.bottom_buttons = []
         self.bottom_button_wrappers = []
-        self.bottom_buttons_frame = None
-
-        base_button_style = {
-            'font': ('Playpen Sans Arabic', 18, 'bold'),
-            'bg': '#000000', # أسود
-            'fg': 'white',
-            'relief': tk.SOLID, # إطار صلب
-            'bd': 2, # سمك الإطار
-            'cursor': 'hand2',
-            'activebackground': '#333333', # رمادي غامق عند الضغط
-            'activeforeground': 'white'
-        }
-        top_button_style = {**base_button_style, 'width': 22, 'height': 2}
-        bottom_button_style = {**base_button_style, 'width': 13, 'height': 1} # تصغير العرض
-
-        buttons_info = [
-            ("برنامج البائعين", self.open_sellers_program, 0.28),
-            ("برنامج العملاء", self.open_clients_program, 0.41),
-            ("برنامج العدة", self.open_inventory_program, 0.54),
-            ("برنامج التحصيل و المنصرف", self.open_collection_program, 0.67),
-        ]
-
-        for text, command, rely in buttons_info:
-            wrapper = tk.Frame(self.root, bg=self.colors['red'])
-            wrapper.place(relx=0.03, rely=rely, anchor=tk.W)
-
-            btn = tk.Button(wrapper, text=text, command=command, **top_button_style)
-            btn.pack(padx=2, pady=2)
-
-            self.menu_buttons.append(btn)
-            self.menu_button_wrappers.append(wrapper)
-
-        # الأزرار السفلية المرصوصة أفقياً
-        bottom_buttons_info = [
-            ("اضافة منصرف", self.open_add_expense),
-            ("اضافة تحصيل", self.open_add_collection),
-            ("جديد", self.open_new_entry),
-            ("ترحيل الزراعة", self.open_agriculture_transfer),
-            ("حسابات", self.open_accounts_module),
-            ("تقارير", self.open_reports_page),
-            ("مزامنة البيانات", self.open_data_sync),
-        ]
-
-        # زر ترحيل الزراعة هو المرجع في الحجم
-        reference_width = bottom_button_style['width']
-        reference_height = bottom_button_style['height']
-
-        # إنشاء أزرار منفصلة مع الحفاظ على الخط الأفقي
-        spacing = 0.15 # تقليل المسافة بين الأزرار
-        buttons_count = len(bottom_buttons_info)
-        base_relx = 0.5 - ((buttons_count - 1) * spacing) / 2
-
-        for index, (text, command) in enumerate(bottom_buttons_info):
-            relx = base_relx + index * spacing
-            wrapper = tk.Frame(self.root, bg=self.colors['pink'])
-            wrapper.place(relx=relx, rely=0.9, anchor=tk.CENTER)
-
+        
+        # --- Helper for Stylish Buttons ---
+        def create_modern_button(parent, text, command, bg_color, text_color='white', width=20, height=2, font_size=16):
+            # Container for shadow/border effect
+            container = tk.Frame(parent, bg=bg_color)
+            
             btn = tk.Button(
-                wrapper,
+                container,
                 text=text,
                 command=command,
-                width=reference_width,
-                height=reference_height,
-                **base_button_style
+                font=('Playpen Sans Arabic', font_size, 'bold'),
+                bg=bg_color,
+                fg=text_color,
+                activebackground=self.adjust_color_brightness(bg_color, 1.2),
+                activeforeground=text_color,
+                relief=tk.FLAT,
+                borderwidth=0,
+                cursor='hand2',
+                width=width,
+                height=height
             )
-            btn.pack(padx=2, pady=2)
+            btn.pack(padx=1, pady=1, fill=tk.BOTH, expand=True)
+            
+            # Hover Effect
+            def on_enter(e):
+                btn['bg'] = self.adjust_color_brightness(bg_color, 1.1)
+                container['bg'] = 'white' # Border glow on hover
+            
+            def on_leave(e):
+                btn['bg'] = bg_color
+                container['bg'] = bg_color # Remove glow
 
-            self.bottom_buttons.append(btn)
+            btn.bind("<Enter>", on_enter)
+            btn.bind("<Leave>", on_leave)
+            
+            return container, btn
+
+        # --- Main Side Buttons ---
+        buttons_info = [
+            ("👤 برنامج البائعين", self.open_sellers_program, 0.28, '#424949'), # Dark Gray
+            ("👥 برنامج العملاء", self.open_clients_program, 0.41, '#424949'),
+            ("🛠️ برنامج العدة", self.open_inventory_program, 0.54, '#424949'),
+            ("💰 برنامج التحصيل", self.open_collection_program, 0.67, '#424949'),
+        ]
+
+        for text, command, rely, color in buttons_info:
+            wrapper, btn = create_modern_button(self.root, text, command, color, width=28, height=3)
+            wrapper.place(relx=0.03, rely=rely, anchor=tk.W)
+            self.menu_button_wrappers.append(wrapper)
+            self.menu_buttons.append(btn)
+
+        # --- Bottom Buttons (Horizontal) ---
+        # ترتيب الأزرار من اليسار لليمين (لجعل التقارير والمزامنة في "الآخر" بالنسبة للقراءة العربية من اليمين)
+        # New Sorted List (Right to Left)
+        bottom_buttons_info = [
+            ("🔄 مزامنة", self.open_data_sync, '#16A085'),
+            ("📈 تقارير", self.open_reports_page, '#34495E'),
+            ("➕ اضافة منصرف", self.open_add_expense, '#C0392B'),
+            ("💵 اضافة تحصيل", self.open_add_collection, '#27AE60'),
+            ("🆕 جديد", self.open_new_entry, '#F39C12'),
+            ("🚜 ترحيل الزراعة", self.open_agriculture_transfer, '#8E44AD'),
+            ("📊 حسابات", self.open_accounts_module, '#7F8C8D'),
+        ]
+        # Ignore old definition
+        _ignored = [
+            ("🔄 مزامنة", self.open_data_sync, '#16A085'), # Teal (Leftmost - End)
+            ("� تقارير", self.open_reports_page, '#34495E'), # Dark Blue
+            ("📊 حسابات", self.open_accounts_module, '#7F8C8D'), # Gray
+            ("🚜 ترحيل الزراعة", self.open_agriculture_transfer, '#8E44AD'), # Purple
+            ("🆕 جديد", self.open_new_entry, '#F39C12'), # Orange
+            ("� اضافة تحصيل", self.open_add_collection, '#27AE60'), # Green
+            ("➕ اضافة منصرف", self.open_add_expense, '#C0392B'), # Red (Rightmost - Start)
+        ]
+
+        # Container Frame for Bottom Buttons to center them easily
+        self.bottom_buttons_frame = tk.Frame(self.root, bg='') # Transparent-ish (inherits parent usually matches bg image but frame opacity is tricky in tk)
+        # Using place for the frame to sit at bottom
+        # To make it look transparent on Canvas, we might need to place individual buttons or use a trick. 
+        # Since we use place for wrappers, let's calculate positions centered.
+        
+        total_width_approx = len(bottom_buttons_info) * 160 # width + padding
+        start_x = (self.root.winfo_screenwidth() - total_width_approx) / 2
+        if start_x < 50: start_x = 50
+        
+        spacing = 0.13 # Relative spacing
+        base_relx = 0.5 - ((len(bottom_buttons_info)-1) * spacing) / 2
+        
+        for i, (text, command, color) in enumerate(bottom_buttons_info):
+            relx = base_relx + i * spacing
+            # Increased size: width=16, height=2, smaller font to fit text if needed
+            wrapper, btn = create_modern_button(self.root, text, command, color, width=16, height=2, font_size=11)
+            # Use place relative to window center bottom
+            wrapper.place(relx=relx, rely=0.90, anchor=tk.CENTER) # Adjust rely up slightly
             self.bottom_button_wrappers.append(wrapper)
-        
-        # زر الخروج في أعلى اليمين
-        exit_button_style = {
-            'font': ('Playpen Sans Arabic', 14, 'bold'),
-            'bg': '#000000', # أسود
-            'fg': 'white',
-            'relief': tk.SOLID,
-            'bd': 2,
-            'cursor': 'hand2',
-            'activebackground': '#333333',
-            'activeforeground': 'white',
-            'width': 10,
-            'height': 1
-        }
-        
-        exit_wrapper = tk.Frame(self.root, bg=self.colors['red'])
-        exit_wrapper.place(relx=0.95, rely=0.05, anchor=tk.NE)
-        
-        exit_btn = tk.Button(
-            exit_wrapper,
-            text="خروج",
-            command=self.confirm_exit,
-            **exit_button_style
+            self.bottom_buttons.append(btn)
+
+        # --- Exit Button ---
+        exit_wrapper, exit_btn = create_modern_button(
+            self.root, "❌ خروج", self.confirm_exit, '#C0392B', width=8, height=1, font_size=12
         )
-        exit_btn.pack(padx=2, pady=2)
-        self.exit_button = exit_btn
+        exit_wrapper.place(relx=0.98, rely=0.03, anchor=tk.NE)
         self.exit_wrapper = exit_wrapper
+
+    def adjust_color_brightness(self, color_hex, factor):
+        """تفتيح أو تغميق لون Hex"""
+        try:
+            # Remove hash
+            color_hex = color_hex.lstrip('#')
+            # Convert to RGB
+            rgb = tuple(int(color_hex[i:i+2], 16) for i in (0, 2, 4))
+            # Adjust
+            new_rgb = tuple(min(255, int(c * factor)) for c in rgb)
+            # Convert back to Hex
+            return '#{:02x}{:02x}{:02x}'.format(*new_rgb)
+        except:
+            return color_hex
     
     def confirm_exit(self):
         """نافذة تأكيد الخروج من البرنامج"""

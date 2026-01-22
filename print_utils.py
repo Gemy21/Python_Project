@@ -1,15 +1,36 @@
-"""
-وحدة طباعة الفواتير
-توفر وظائف حفظ PDF والطباعة المباشرة
-"""
 
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import messagebox, filedialog
 import os
 import json
+import tempfile
+import sys
 from datetime import datetime
 
+# --- ReportLab Imports ---
+try:
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.colors import black, white, HexColor
+except ImportError:
+    pass # Will handle check in code
+
+# --- Arabic Support ---
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    HAS_ARABIC_SUPPORT = True
+except ImportError:
+    HAS_ARABIC_SUPPORT = False
+
+# --- CONFIG ---
 CONFIG_FILE = "config.json"
+PAGE_WIDTH_CM = 11.0 # As requested
+# PAGE_HEIGHT_CM = 30.0 # As requested
+# Adjusting to A4 height or dynamic? User said "11 x 30 cm".
+PAGE_HEIGHT_CM = 30.0 
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -24,610 +45,455 @@ def save_config(config):
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"Error saving config: {e}")
+    except:
+        pass
 
+# --- METRICS HELPERS ---
+def cm_to_px(cm, dpi=96):
+    # 1 inch = 2.54 cm
+    return int(cm * dpi / 2.54)
+
+def cm_to_pdf(cm):
+    # 1 cm = 28.3465 points
+    return cm * 28.3465
+
+# --- ABSTRACT BACKEND ---
+class DrawBackend:
+    def draw_text(self, x_cm, y_cm, text, font_size, align='left', bold=False, color='#000000'):
+        raise NotImplementedError
+
+    def draw_rect(self, x_cm, y_cm, width_cm, height_cm, border_color='#000000', fill_color=None, border_width=1):
+        raise NotImplementedError
+    
+    def draw_line(self, x1_cm, y1_cm, x2_cm, y2_cm, color='#000000', width=1):
+        raise NotImplementedError
+    
+    def get_page_size_cm(self):
+        return PAGE_WIDTH_CM, PAGE_HEIGHT_CM
+
+# --- TKINTER BACKEND ---
+class TkCanvasBackend(DrawBackend):
+    def __init__(self, canvas: tk.Canvas, scale=1.0):
+        self.canvas = canvas
+        self.scale = scale # Zoom factor if needed (default 1 to match 96DPI approx)
+        self.dpi = 110 # Slightly higher than 96 to look good on screen
+        
+    def _c2p(self, cm):
+        return cm_to_px(cm, self.dpi) * self.scale
+
+    def draw_text(self, x_cm, y_cm, text, font_size, align='left', bold=False, color='#000000'):
+        if not text: return
+        x = self._c2p(x_cm)
+        y = self._c2p(y_cm)
+        
+        # Font mapping
+        # Tk font size is usually negative for pixels or positive for points. 
+        # Using negative to match px somewhat or just heuristics.
+        # Heuristic: font_size (pt) -> px. 12pt ~= 16px.
+        f_size = int(font_size * 1.3 * self.scale) 
+        weight = 'bold' if bold else 'normal'
+        font_spec = ('Simplified Arabic', f_size, weight) # Good for Arabic
+        
+        anchor_map = {'left': 'nw', 'center': 'n', 'right': 'ne'}
+        anchor = anchor_map.get(align, 'nw')
+        
+        self.canvas.create_text(x, y, text=text, font=font_spec, fill=color, anchor=anchor)
+
+    def draw_rect(self, x_cm, y_cm, width_cm, height_cm, border_color='#000000', fill_color=None, border_width=1):
+        x1 = self._c2p(x_cm)
+        y1 = self._c2p(y_cm)
+        x2 = self._c2p(x_cm + width_cm)
+        y2 = self._c2p(y_cm + height_cm)
+        
+        outline = border_color if border_color else ''
+        fill = fill_color if fill_color else ''
+        
+        # Tkinter requires empty string for transparent, not None
+        self.canvas.create_rectangle(x1, y1, x2, y2, outline=outline, fill=fill, width=border_width)
+
+    def draw_line(self, x1_cm, y1_cm, x2_cm, y2_cm, color='#000000', width=1):
+        self.canvas.create_line(
+            self._c2p(x1_cm), self._c2p(y1_cm),
+            self._c2p(x2_cm), self._c2p(y2_cm),
+            fill=color, width=width
+        )
+
+# --- REPORTLAB BACKEND ---
+class ReportLabBackend(DrawBackend):
+    def __init__(self, canvas_obj, height_cm):
+        self.c = canvas_obj
+        self.height_cm = height_cm
+        self.font_name = 'Arial' # Will register
+        self.font_name_bold = 'Arial-Bold'
+        
+        # Register Font
+        self._register_font()
+
+    def _register_font(self):
+        try:
+            # Try to find standard fonts
+            # Windows font paths
+            font_paths = [
+                "C:\\Windows\\Fonts\\arial.ttf",
+                "C:\\Windows\\Fonts\\tahoma.ttf",
+                "C:\\Windows\\Fonts\\segoeui.ttf"
+            ]
+            font_path = None
+            for p in font_paths:
+                if os.path.exists(p):
+                    font_path = p
+                    break
+            
+            if font_path:
+                pdfmetrics.registerFont(TTFont('Arial', font_path))
+                self.font_name = 'Arial'
+                
+                # Check for bold
+                base, ext = os.path.splitext(font_path)
+                bold_path = base + "bd" + ext # arialbd.ttf
+                if os.path.exists(bold_path):
+                     pdfmetrics.registerFont(TTFont('Arial-Bold', bold_path))
+                else:
+                     self.font_name_bold = 'Arial' # Fallback
+            else:
+                self.font_name = 'Helvetica'
+                self.font_name_bold = 'Helvetica-Bold'
+                
+        except Exception as e:
+            print(f"Font registration warning: {e}")
+            self.font_name = 'Helvetica' # Fallback
+
+    def _reshape(self, text):
+        if HAS_ARABIC_SUPPORT and text:
+            try:
+                reshaped = arabic_reshaper.reshape(str(text))
+                return get_display(reshaped)
+            except:
+                return str(text)
+        return str(text)
+
+    def _y(self, y_cm):
+        # Convert Top-Down Y (cm) to Bottom-Up PDF Y (points)
+        return cm_to_pdf(self.height_cm - y_cm)
+
+    def _x(self, x_cm):
+        return cm_to_pdf(x_cm)
+
+    def draw_text(self, x_cm, y_cm, text, font_size, align='left', bold=False, color='#000000'):
+        if not text: return
+        text = self._reshape(text)
+        
+        font = self.font_name_bold if bold else self.font_name
+        self.c.setFont(font, font_size)
+        self.c.setFillColor(HexColor(color))
+        
+        x = self._x(x_cm)
+        y = self._y(y_cm) # Base line. But Tk draws from Top-Left. 
+        # API expects y_cm to be the TOP of the text or baseline?
+        # Tkinter anchor usually 'nw' (top-left).
+        # ReportLab text is drawn from baseline. 
+        # Need to adjust Y down by font size approx.
+        y -= font_size # Approximation
+        
+        if align == 'left':
+            self.c.drawString(x, y, text)
+        elif align == 'center':
+            self.c.drawCentredString(x, y, text)
+        elif align == 'right':
+            self.c.drawRightString(x, y, text)
+
+    def draw_rect(self, x_cm, y_cm, width_cm, height_cm, border_color='#000000', fill_color=None, border_width=1):
+        x = self._x(x_cm)
+        y = self._y(y_cm + height_cm) # Bottom-Left Y
+        w = cm_to_pdf(width_cm)
+        h = cm_to_pdf(height_cm)
+        
+        stroke = 1 if border_color else 0
+        fill = 1 if fill_color else 0
+        
+        if border_color: self.c.setStrokeColor(HexColor(border_color))
+        if fill_color: self.c.setFillColor(HexColor(fill_color))
+        
+        self.c.setLineWidth(border_width * 0.5) # Scale width bits
+        self.c.rect(x, y, w, h, fill=fill, stroke=stroke)
+
+    def draw_line(self, x1_cm, y1_cm, x2_cm, y2_cm, color='#000000', width=1):
+        self.c.setStrokeColor(HexColor(color))
+        self.c.setLineWidth(width * 0.5)
+        self.c.line(self._x(x1_cm), self._y(y1_cm), self._x(x2_cm), self._y(y2_cm))
+
+# --- INVOICE RENDERER ---
+class InvoiceDrawer:
+    def __init__(self, backend: DrawBackend, data):
+        self.b = backend
+        self.data = data
+        self.width_page, self.height_page = backend.get_page_size_cm()
+        self.margin = 0.5
+        self.width = self.width_page - 2 * self.margin
+        
+    def draw(self):
+        y = self.margin
+        
+        # 1. Header
+        y = self.draw_header(y)
+        
+        # 2. Client Info
+        y = self.draw_client_info(y)
+        
+        # 3. Table
+        y = self.draw_table(y)
+        
+        # 4. Footer
+        self.draw_footer(y) # Draw at next Y or fixed bottom? Let's flow.
+        
+    def draw_header(self, y):
+        cx = self.margin + self.width / 2
+        right_x = self.margin + self.width
+        
+        # Logo placeholder
+        self.b.draw_text(cx, y, "🍎", 24, 'center', color='#C0392B')
+        y += 1.2
+        self.b.draw_text(cx, y, "MOHEY BAJAR", 10, 'center', bold=True, color='#2C3E50')
+        y += 0.8
+        
+        # Company Info (Right)
+        # We'll center for this narrow receipt look or use right align?
+        # User requested 11x30cm, which is narrow. Centered header is best.
+        self.b.draw_text(cx, y, "خلفاء الحاج محي غريب بعجر", 12, 'center', bold=True)
+        y += 0.6
+        self.b.draw_text(cx, y, "تجارة الخضروات والفواكه", 10, 'center')
+        y += 0.6
+        self.b.draw_text(cx, y, "كفر الشيخ - فوه", 10, 'center')
+        y += 0.6
+        self.b.draw_text(cx, y, "ت / 0472976880", 10, 'center')
+        y += 1.0
+        
+        self.b.draw_line(self.margin, y, self.margin + self.width, y, width=2)
+        y += 0.2
+        return y
+        
+    def draw_client_info(self, y):
+        # Two columns: Date (Left), Name (Right)
+        self.b.draw_rect(self.margin, y, self.width, 1.5, border_color='#000000', fill_color='#F4F6F7')
+        
+        # Right: Name
+        tx_y = y + 0.3
+        self.b.draw_text(self.margin + self.width - 0.2, tx_y, f"المطلوب من: {self.data['client_name']}", 10, 'right', bold=True)
+        
+        # Left: Date
+        self.b.draw_text(self.margin + 0.2, tx_y + 0.6, f"التاريخ: {self.data['invoice_date']}", 9, 'left')
+        
+        return y + 1.8
+        
+    def draw_table(self, y):
+        # Cols: Item, Price, Weight, Count, Amount
+        # Widths ratios for 11cm width
+        # Total Width = 10cm.
+        # Amount: 2, Count: 1.5, Weight: 1.5, Price: 1.5, Item: 3.5
+        
+        cols = [
+            # Header, Width, Align
+            ("المبلغ", 2.0, 'center'),
+            ("العدد", 1.5, 'center'),
+            ("الوزن", 1.5, 'center'),
+            ("السعر", 1.5, 'center'),
+            ("الصنف", 3.5, 'right')
+        ]
+        
+        # Header
+        h_height = 0.8
+        current_x = self.margin
+        
+        # Draw Headers (Left to Right logic, but Arabic is RTL visually)
+        # We draw rectangles from Left to Right.
+        # But columns order should be visually: Amount (Left) ... Item (Right)?
+        # Or Item (Right) ... Amount (Left)?
+        # Standard Arabic Table: Item (Right), ..., Amount (Left).
+        # Let's reverse the list to draw from Right to Left?
+        # No, let's keep array as [Amount, Count, Weight, Price, Item] if we want Left->Right drawing to map to visual Left->Right.
+        # Visual: | Amount | Count | Weight | Price | Item |
+        # X:      0       2       3.5      5       6.5    10
+        
+        x_positions = []
+        cx = self.margin
+        for title, w, align in cols:
+            self.b.draw_rect(cx, y, w, h_height, fill_color='#34495E', border_color='white')
+            # Text
+            tx = cx + w/2 if align == 'center' else (cx + w - 0.2 if align == 'right' else cx + 0.2)
+            self.b.draw_text(tx, y + 0.1, title, 10, align, bold=True, color='#FFFFFF')
+            x_positions.append((cx, w, align))
+            cx += w
+            
+        y += h_height
+        
+        # Rows
+        row_height = 0.7
+        # transactions structure: (item, weight, count, price, amount, type)
+        # Cols map: Amount (4), Count (2), Weight (1), Price (3), Item (0)
+        
+        for i, trans in enumerate(self.data['transactions']):
+            item = str(trans[0])
+            weight = f"{trans[1]:.2f}" if trans[1] else "-"
+            count = f"{trans[2]:.0f}" if trans[2] else "-"
+            price = f"{trans[3]:.2f}" if trans[3] else "-"
+            amount = f"{trans[4]:.2f}" if trans[4] else "0.00"
+            
+            vals = [amount, count, weight, price, item]
+            
+            bg = '#F2F3F4' if i % 2 == 0 else '#FFFFFF'
+            
+            cx = self.margin
+            for idx, val in enumerate(vals):
+                w = cols[idx][1]
+                align = cols[idx][2]
+                
+                self.b.draw_rect(cx, y, w, row_height, fill_color=bg, border_color='#BDC3C7', border_width=0.5)
+                
+                tx = cx + w/2 if align == 'center' else (cx + w - 0.2 if align == 'right' else cx + 0.2)
+                self.b.draw_text(tx, y + 0.1, str(val), 9, align)
+                
+                cx += w
+            
+            y += row_height
+            
+            # Check Page Break (simplified - just stop or new page not implemented in single page preview)
+            if y > self.height_page - 5: # Leave space for footer
+                 break 
+                 
+        return y + 0.5
+
+    def draw_footer(self, y):
+        # Totals
+        # Goods Total
+        self.draw_summary_row(y, "إجمالي البضاعة", f"{self.data['total_goods']:.2f}")
+        y += 0.8
+        
+        # Deductions
+        if self.data.get('total_deductions', 0) > 0:
+             self.draw_summary_row(y, "الخصومات", f"{self.data['total_deductions']:.2f}", color='#E6B0AA')
+             y += 0.8
+             
+        # Final
+        self.draw_summary_row(y, "الصافي المستحق", f"{self.data['final_total']:.2f}", bold=True, bg='#D4EFDF')
+        
+    def draw_summary_row(self, y, label, value, bold=False, color='#FFFFFF', bg=None):
+        h = 0.8
+        self.b.draw_rect(self.margin, y, self.width, h, fill_color=bg)
+        
+        # Label Right
+        self.b.draw_text(self.margin + self.width - 0.2, y+0.1, label, 10, 'right', bold=bold)
+        
+        # Value Left
+        self.b.draw_text(self.margin + 2.0, y+0.1, value, 10, 'center', bold=True)
+
+
+# --- WINDOW & API ---
 
 class PrintPreviewWindow:
-    """نافذة معاينة وطباعة الفاتورة"""
-    
     def __init__(self, parent, invoice_data):
-        """
-        Parameters:
-        - parent: النافذة الأب
-        - invoice_data: dict يحتوي على:
-            - seller_name: اسم البائع
-            - invoice_date: تاريخ الفاتورة
-            - old_balance: الرصيد السابق
-            - transactions: قائمة المعاملات [(item, weight, count, price, amount, status), ...]
-            - total_goods: إجمالي البضاعة
-            - total_paid: إجمالي المدفوع
-            - final_balance: المتبقي النهائي
-        """
-        self.parent = parent
         self.data = invoice_data
         
         self.window = tk.Toplevel(parent)
-        self.window.title(f"معاينة طباعة - {invoice_data['seller_name']}")
-        self.window.geometry("768x756")
-        self.window.configure(bg='white')
+        self.window.title(f"معاينة وطباعة - {invoice_data['client_name']}")
+        self.window.geometry("600x800")
         
-        # توسيط النافذة
-        self.window.update_idletasks()
-        x = (self.window.winfo_screenwidth() // 2) - 384
-        y = (self.window.winfo_screenheight() // 2) - 378
-        self.window.geometry(f"768x756+{x}+{y}")
+        # Toolbar
+        toolbar = tk.Frame(self.window, bg='#ECF0F1', pady=5)
+        toolbar.pack(side=tk.TOP, fill=tk.X)
         
-        self.create_preview()
+        tk.Button(toolbar, text="🖨️ طباعة", command=self.print_pdf, bg='#27AE60', fg='white', font=('Arial', 11, 'bold')).pack(side=tk.RIGHT, padx=10)
+        tk.Button(toolbar, text="💾 حفظ PDF", command=self.save_pdf_dialog, bg='#3498DB', fg='white', font=('Arial', 11, 'bold')).pack(side=tk.RIGHT, padx=10)
         
-    def create_preview(self):
-        """إنشاء واجهة المعاينة"""
-        # إطار المعاينة (يحاكي ورقة A4)
-        preview_frame = tk.Frame(self.window, bg='white', relief=tk.SOLID, bd=2)
-        preview_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Canvas Scroll
+        frame = tk.Frame(self.window)
+        frame.pack(fill=tk.BOTH, expand=True)
         
-        # Canvas للتمرير
-        canvas = tk.Canvas(preview_frame, bg='white')
-        # استخدام tk.Scrollbar بدلاً من ttk.Scrollbar للتحكم في العرض
-        scrollbar = tk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=canvas.yview, width=25, bg='#BDC3C7')
-        scrollable_frame = tk.Frame(canvas, bg='white')
+        # Scrollbars
+        vbar = tk.Scrollbar(frame, orient=tk.VERTICAL)
+        hbar = tk.Scrollbar(frame, orient=tk.HORIZONTAL)
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        self.canvas = tk.Canvas(frame, bg='#5D6D7E', 
+                                yscrollcommand=vbar.set, xscrollcommand=hbar.set)
+        
+        vbar.config(command=self.canvas.yview)
+        hbar.config(command=self.canvas.xview)
+        
+        vbar.pack(side=tk.RIGHT, fill=tk.Y)
+        hbar.pack(side=tk.BOTTOM, fill=tk.X)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        self.draw_preview()
+        
+    def draw_preview(self):
+        # Create a "Paper" on the canvas
+        # 11cm x 30cm scaled
+        backend = TkCanvasBackend(self.canvas)
+        
+        # Paper visual
+        pw_px = backend._c2p(PAGE_WIDTH_CM)
+        ph_px = backend._c2p(PAGE_HEIGHT_CM)
+        
+        # Background space
+        margin_view = 20
+        self.canvas.config(scrollregion=(0, 0, pw_px + 2*margin_view, ph_px + 2*margin_view))
+        
+        # The paper rectangle
+        self.canvas.create_rectangle(margin_view, margin_view, margin_view+pw_px, margin_view+ph_px, fill='white', outline='black', width=1)
+        
+        # Make a sub-canvas offset logic or just shift drawing?
+        # TkCanvasBackend needs offset support? 
+        # Easier: Move all items after drawing or backend offset.
+        # Let's add offsets to Backend.
+        
+        # Hack adjust backend to draw relative to paper
+        origin_redraw = backend._c2p
+        def offset_c2p(cm):
+            return origin_redraw(cm) + margin_view
+        backend._c2p = offset_c2p
+        
+        # Draw
+        drawer = InvoiceDrawer(backend, self.data)
+        drawer.draw()
+
+    def generate_pdf(self, filepath):
+        c = canvas.Canvas(filepath, pagesize=(cm_to_pdf(PAGE_WIDTH_CM), cm_to_pdf(PAGE_HEIGHT_CM)))
+        backend = ReportLabBackend(c, PAGE_HEIGHT_CM)
+        drawer = InvoiceDrawer(backend, self.data)
+        drawer.draw()
+        c.save()
+
+    def save_pdf_dialog(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF Files", "*.pdf")],
+            initialfile=f"فاتورة_{self.data['client_name']}_{datetime.now().strftime('%Y-%m-%d')}.pdf"
         )
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # تفعيل السكرول بالماوس
-        def _on_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            
-        self.window.bind("<MouseWheel>", _on_mousewheel)
-        
-        # === محتوى الفاتورة ===
-        
-        # الرأس (تصميم الكارت)
-        header_frame = tk.Frame(scrollable_frame, bg='white', pady=10, relief=tk.SOLID, bd=2)
-        header_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
-        
-        # تقسيم الرأس إلى 3 أقسام (يمين - وسط - يسار)
-        
-        # 1. اليمين: بيانات الشركة (اسم وعنوان)
-        right_frame = tk.Frame(header_frame, bg='white')
-        right_frame.pack(side=tk.RIGHT, padx=20)
-        
-        tk.Label(right_frame, text="خلفاء الحاج محي غريب بعجر", 
-                font=('Simplified Arabic', 22, 'bold'), fg='#C0392B', bg='white').pack(anchor='e')
-        
-        tk.Label(right_frame, text="تجارة الخضروات والفواكه", 
-                font=('Simplified Arabic', 18, 'bold'), fg='#C0392B', bg='white').pack(anchor='e')
-                
-        tk.Label(right_frame, text="كفر الشيخ - فوه - ميدان السوق الكبير", 
-                font=('Simplified Arabic', 12, 'bold'), fg='#2C3E50', bg='white').pack(anchor='e')
-                
-        tk.Label(right_frame, text="ت / 0472976880", 
-                font=('Arial', 12, 'bold'), fg='#2C3E50', bg='white').pack(anchor='e')
-
-        # 2. اليسار: أرقام التليفون
-        left_frame = tk.Frame(header_frame, bg='white')
-        left_frame.pack(side=tk.LEFT, padx=20)
-        
-        phones = [
-            ("محمد", "01014501415"),
-            ("سعيد", "01009220363"),
-            ("أحمد", "01007367830")
-        ]
-        
-        for name, num in phones:
-            p_frame = tk.Frame(left_frame, bg='white')
-            p_frame.pack(anchor='w')
-            tk.Label(p_frame, text=f"{name} / ", font=('Simplified Arabic', 12, 'bold'), bg='white').pack(side=tk.RIGHT)
-            tk.Label(p_frame, text=num, font=('Arial', 12, 'bold'), bg='white').pack(side=tk.LEFT)
-
-        # 3. الوسط: الشعار (نص مؤقت)
-        center_frame = tk.Frame(header_frame, bg='white')
-        center_frame.pack(side=tk.TOP, expand=True)
-        
-        tk.Label(center_frame, text="🍎", font=('Arial', 40), bg='white', fg='#C0392B').pack()
-        tk.Label(center_frame, text="MOHEY BAJAR", font=('Times New Roman', 14, 'bold'), bg='white', fg='#2C3E50').pack()
-        
-        # معلومات البائع والتاريخ
-        info_frame = tk.Frame(scrollable_frame, bg='white')
-        info_frame.pack(fill=tk.X, padx=40, pady=15)
-        
-        # البائع
-        seller_frame = tk.Frame(info_frame, bg='#ECF0F1', relief=tk.SOLID, bd=1)
-        seller_frame.pack(side=tk.RIGHT, padx=10, ipadx=15, ipady=8)
-        tk.Label(seller_frame, text=f"البائع: {self.data['seller_name']}", 
-                font=('Simplified Arabic', 16, 'bold'), bg='#ECF0F1').pack()
-        
-        # التاريخ
-        date_frame = tk.Frame(info_frame, bg='#ECF0F1', relief=tk.SOLID, bd=1)
-        date_frame.pack(side=tk.LEFT, padx=10, ipadx=15, ipady=8)
-        tk.Label(date_frame, text=f"التاريخ: {self.data['invoice_date']}", 
-                font=('Simplified Arabic', 14), bg='#ECF0F1').pack()
-        
-        # الرصيد السابق
-        if self.data['old_balance'] != 0:
-            balance_frame = tk.Frame(scrollable_frame, bg='#FFF9E6', relief=tk.SOLID, bd=2)
-            balance_frame.pack(fill=tk.X, padx=40, pady=8)
-            tk.Label(
-                balance_frame,
-                text=f"الرصيد السابق: {self.data['old_balance']:.2f} جنيه",
-                font=('Simplified Arabic', 14, 'bold'),
-                bg='#FFF9E6'
-            ).pack(pady=8)
-        
-        # جدول المعاملات
-        table_frame = tk.Frame(scrollable_frame, bg='white')
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=15)
-        
-        # رأس الجدول
-        headers = ['الصنف', 'السعر', 'الوزن', 'العدد', 'المبلغ']
-        header_bg = '#34495E'
-        
-        for i, header in enumerate(headers):
-            lbl = tk.Label(
-                table_frame,
-                text=header,
-                font=('Simplified Arabic', 14, 'bold'),
-                bg=header_bg,
-                fg='white',
-                relief=tk.RAISED,
-                bd=1,
-                pady=10
-            )
-            lbl.grid(row=0, column=i, sticky='nsew', padx=1, pady=1)
-            table_frame.grid_columnconfigure(i, weight=1)
-        
-        # صفوف البيانات
-        for idx, trans in enumerate(self.data['transactions'], start=1):
-            # trans: (item_name, weight, count, price, amount, status)
-            item_name = trans[0] if trans[0] else ""
-            weight = f"{trans[1]:.2f}" if trans[1] else ""
-            count = f"{trans[2]:.0f}" if trans[2] else ""
-            price = f"{trans[3]:.2f}" if trans[3] else ""
-            amount = f"{trans[4]:.2f}" if trans[4] else "0.00"
-            status = trans[5] if trans[5] else ""
-            
-            # لون الصف حسب الحالة
-            if status == "مدفوع":
-                row_bg = '#FADBD8'
-            elif status == "متبقي":
-                row_bg = '#D6EAF8'
-            else:
-                row_bg = '#F8F9F9'
-            
-            # الترتيب الجديد: الصنف، السعر، الوزن، العدد، المبلغ
-            values = [item_name, price, weight, count, amount]
-            
-            for col, val in enumerate(values):
-                lbl = tk.Label(
-                    table_frame,
-                    text=val,
-                    font=('Simplified Arabic', 13),
-                    bg=row_bg,
-                    relief=tk.SOLID,
-                    bd=1,
-                    pady=8
-                )
-                lbl.grid(row=idx, column=col, sticky='nsew', padx=1, pady=1)
-        
-        # الإجماليات
-        totals_frame = tk.Frame(scrollable_frame, bg='#F4F6F7', relief=tk.SOLID, bd=2, pady=10)
-        totals_frame.pack(fill=tk.X, padx=40, pady=20)
-        
-        def add_total_row(label, value, color='#FFFFFF'):
-            row = tk.Frame(totals_frame, bg=totals_frame['bg'])
-            row.pack(fill=tk.X, pady=5)
-            
-            tk.Label(row, text=value, font=('Simplified Arabic', 15, 'bold'), 
-                    bg=color, relief=tk.SOLID, bd=1, width=18, pady=5).pack(side=tk.LEFT, padx=15)
-            tk.Label(row, text=label, font=('Simplified Arabic', 14, 'bold'), 
-                    bg=totals_frame['bg']).pack(side=tk.LEFT, padx=5)
-        
-        add_total_row("إجمالي الفاتورة:", f"{self.data['total_goods']:.2f} جنيه", '#FFF3CD')
-        add_total_row("المدفوع:", f"{self.data['total_paid']:.2f} جنيه", '#F8D7DA')
-        add_total_row("المتبقي (صافي):", f"{self.data['final_balance']:.2f} جنيه", '#D4EDDA')
-        
-        # الفوتر (الأزرار)
-        buttons_frame = tk.Frame(self.window, bg='#ECF0F1', pady=15)
-        buttons_frame.pack(fill=tk.X, side=tk.BOTTOM)
-        
-        btn_style = {
-            'font': ('Playpen Sans Arabic', 13, 'bold'),
-            'fg': 'white',
-            'relief': tk.RAISED,
-            'bd': 3,
-            'cursor': 'hand2',
-            'width': 15,
-            'height': 2
-        }
-        
-        tk.Button(
-            buttons_frame,
-            text="حفظ PDF",
-            command=self.save_as_pdf,
-            bg='#E74C3C',
-            **btn_style
-        ).pack(side=tk.RIGHT, padx=20)
-        
-        tk.Button(
-            buttons_frame,
-            text="طباعة مباشرة",
-            command=self.print_direct,
-            bg='#3498DB',
-            **btn_style
-        ).pack(side=tk.RIGHT, padx=10)
-        
-        # قائمة الطابعات
-        self.printer_var = tk.StringVar()
-        try:
-            import win32print
-            # جلب الطابعات المحلية والمتصلة بالشبكة
-            flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-            printers_info = win32print.EnumPrinters(flags)
-            printers = [p[2] for p in printers_info]
-            
-            default_printer = win32print.GetDefaultPrinter()
-            default_printer = win32print.GetDefaultPrinter()
-        except ImportError:
-            messagebox.showerror("خطأ", "مكتبة win32print غير مثبتة.\nلا يمكن الطباعة المباشرة.")
-            printers = []
-            default_printer = ""
-        except Exception as e:
-            messagebox.showerror("خطأ في الطابعات", f"حدث خطأ أثناء البحث عن الطابعات:\n{str(e)}\n\nتأكد من توصيل الطابعة وتعريفها على الويندوز.")
-            printers = []
-            default_printer = ""
-        
-        # إضافة خيار PDF دائماً للطوارئ إذا أردنا، أو الاعتماد على زر حفظ PDF المنفصل
-        # لكن المستخدم يريد الطباعة المباشرة.
-        if not printers:
-             printers = ["Microsoft Print to PDF"] # محاولة افتراضية
-            
-        if printers:
-            self.printer_combo = ttk.Combobox(buttons_frame, textvariable=self.printer_var, values=printers, state='readonly', width=25, font=('Arial', 10))
-            self.printer_combo.pack(side=tk.RIGHT, padx=5)
-            if default_printer in printers:
-                self.printer_combo.set(default_printer)
-            elif printers:
-                self.printer_combo.current(0)
-        else:
-            tk.Label(buttons_frame, text="لا توجد طابعات", bg='#ECF0F1', fg='red').pack(side=tk.RIGHT, padx=5)
-        
-        tk.Button(
-            buttons_frame,
-            text="إغلاق",
-            command=self.window.destroy,
-            bg='#95A5A6',
-            **btn_style
-        ).pack(side=tk.LEFT, padx=20)
-    
-    def save_as_pdf(self):
-        """حفظ الفاتورة كملف PDF"""
-        try:
-            from reportlab.lib.pagesizes import A4
-            from reportlab.pdfgen import canvas
-            from reportlab.pdfbase import pdfmetrics
-            from reportlab.pdfbase.ttfonts import TTFont
-            from reportlab.lib.units import cm
-            
-            # تحديد مسار الحفظ
-            config = load_config()
-            save_dir = config.get('pdf_save_dir', '')
-            
-            # إذا لم يتم تحديد مجلد مسبقاً أو المجلد غير موجود، اطلب من المستخدم
-            if not save_dir or not os.path.exists(save_dir):
-                save_dir = filedialog.askdirectory(title="اختر مجلد حفظ الفواتير")
-                if not save_dir:
-                    return
-                # حفظ المجلد المختار
-                config['pdf_save_dir'] = save_dir
-                save_config(config)
-            
-            # تكوين اسم الملف
-            clean_date = datetime.now().strftime('%Y-%m-%d')
-            safe_seller_name = "".join([c for c in self.data['seller_name'] if c.isalnum() or c in (' ', '_', '-')]).strip()
-            base_name = f"فاتورة_{safe_seller_name}_{clean_date}"
-            
-            filename = f"{base_name}.pdf"
-            full_path = os.path.join(save_dir, filename)
-            
-            # معالجة تكرار الاسم
-            counter = 1
-            while os.path.exists(full_path):
-                filename = f"{base_name}_{counter}.pdf"
-                full_path = os.path.join(save_dir, filename)
-                counter += 1
-            
-            filepath = full_path
-            
-            # إعداد الخط العربي
-            font_name = "Helvetica"
+        if filepath:
             try:
-                # محاولة تسجيل خط Arial
-                pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
-                font_name = 'Arial'
-            except:
-                try:
-                    # محاولة مسار ويندوز القياسي
-                    pdfmetrics.registerFont(TTFont('Arial', 'C:\\Windows\\Fonts\\arial.ttf'))
-                    font_name = 'Arial'
-                except:
-                    pass
-            
-            # إنشاء PDF
-            # الكشف: عرض 11 سم × طول 30 سم
-            page_width = 11 * cm
-            page_height = 30 * cm
-            
-            c = canvas.Canvas(filepath, pagesize=(page_width, page_height))
-            width, height = page_width, page_height
-            
-            # الرأس
-            c.setFont(font_name, 16)  # تصغير الخط ليناسب العرض الضيق
-            c.drawCentredString(width/2, height - 1*cm, "كشف حساب")
-            
-            c.setFont(font_name, 10)
-            c.drawCentredString(width/2, height - 1.7*cm, "خلفاء الحاج محي غريب بعجر")
-            
-            # معلومات البائع
-            y = height - 2.5*cm
-            c.setFont(font_name, 9)
-            c.drawRightString(width - 0.3*cm, y, f"البائع: {self.data['seller_name']}")
-            y -= 0.5*cm
-            c.drawRightString(width - 0.3*cm, y, f"التاريخ: {self.data['invoice_date']}")
-            
-            # الرصيد السابق
-            if self.data['old_balance'] != 0:
-                y -= 0.6*cm
-                c.setFont(font_name, 8)
-                c.drawRightString(width - 0.3*cm, y, f"الرصيد السابق: {self.data['old_balance']:.2f}")
-            
-            # جدول المعاملات
-            y -= 1*cm
-            
-            # رؤوس الأعمدة (من اليمين لليسار)
-            c.setFont(font_name, 7)
-            col_positions = [
-                (width - 0.3*cm, "المبلغ"),
-                (width - 2.3*cm, "العدد"),
-                (width - 4*cm, "الوزن"),
-                (width - 5.7*cm, "السعر"),
-                (width - 8*cm, "الصنف")
-            ]
-            
-            for x_pos, header in col_positions:
-                c.drawRightString(x_pos, y, header)
-            
-            y -= 0.3*cm
-            c.line(0.2*cm, y, width - 0.2*cm, y)
-            
-            # البيانات
-            c.setFont(font_name, 7)
-            for trans in self.data['transactions']:
-                y -= 0.4*cm
-                if y < 2*cm:
-                    c.showPage()
-                    y = height - 1*cm
-                    c.setFont(font_name, 7)
-                
-                item = trans[0] or ""
-                price = f"{trans[3]:.2f}" if trans[3] else ""
-                weight = f"{trans[1]:.2f}" if trans[1] else ""
-                count = f"{trans[2]:.0f}" if trans[2] else ""
-                amount = f"{trans[4]:.2f}" if trans[4] else "0.00"
-                
-                c.drawRightString(width - 0.3*cm, y, amount)
-                c.drawRightString(width - 2.3*cm, y, count)
-                c.drawRightString(width - 4*cm, y, weight)
-                c.drawRightString(width - 5.7*cm, y, price)
-                # تقصير اسم الصنف إذا كان طويلاً
-                if len(item) > 15:
-                    item = item[:15] + "..."
-                c.drawRightString(width - 8*cm, y, item)
-            
-            # الإجماليات
-            y -= 0.8*cm
-            c.line(0.2*cm, y, width - 0.2*cm, y)
-            y -= 0.5*cm
-            c.setFont(font_name, 8)
-            c.drawRightString(width - 0.3*cm, y, f"إجمالي البضاعة: {self.data['total_goods']:.2f}")
-            y -= 0.4*cm
-            c.drawRightString(width - 0.3*cm, y, f"المدفوع: {self.data['total_paid']:.2f}")
-            y -= 0.4*cm
-            c.drawRightString(width - 0.3*cm, y, f"المتبقي: {self.data['final_balance']:.2f}")
-            
-            c.save()
-            messagebox.showinfo("نجاح", f"تم حفظ PDF بنجاح:\n{filepath}")
-            
-        except ImportError:
-            messagebox.showerror("خطأ", "مكتبة reportlab غير مثبتة")
-        except Exception as e:
-            messagebox.showerror("خطأ", f"فشل حفظ PDF:\n{e}")
-    
-    def print_direct(self):
-        """طباعة مباشرة (Windows) باستخدام GDI لدعم العربية"""
+                self.generate_pdf(filepath)
+                messagebox.showinfo("نجاح", "تم الحفظ بنجاح")
+                os.startfile(filepath)
+            except Exception as e:
+                messagebox.showerror("خطأ", f"فشل الحفظ: {e}")
+
+    def print_pdf(self):
         try:
-            import win32print
-            import win32ui
-            import win32con
+            # Create temp file
+            fd, path = tempfile.mkstemp(suffix=".pdf")
+            os.close(fd)
             
-            printer_name = self.printer_var.get()
-            if not printer_name:
-                printer_name = win32print.GetDefaultPrinter()
+            self.generate_pdf(path)
             
-            if not printer_name:
-                messagebox.showwarning("تنبيه", "الرجاء اختيار طابعة")
-                return
-
-            hprinter = win32print.OpenPrinter(printer_name)
-            
+            # Print using ShellExecute
+            # "print" verb works if a PDF reader is associated
             try:
-                hdc = win32ui.CreateDC()
-                hdc.CreatePrinterDC(printer_name)
+                win32api.ShellExecute(0, "print", path, None, ".", 0)
+                # Note: This is async. We can't delete file immediately.
+                # Maybe schedule deletion or leave in temp.
+            except Exception as e:
+                # Fallback to os.startfile
+                os.startfile(path, "print")
                 
-                hdc.StartDoc("فاتورة مبيعات")
-                hdc.StartPage()
-                
-                # أبعاد مخصصة (11×30 سم)
-                # 11 cm width, 30 cm height
-                pixel_width = int(11 * (horz_res / (horz_res / (3.78 * 11) if horz_res > 0 else 1))) # Approximating scale
-                
-                margin_x = int(horz_res * 0.05)
-                margin_y = int(vert_res * 0.05)
-                width = horz_res - 2 * margin_x
-                
-                y = margin_y
-                
-                # الخطوط (أصغر لتناسب العرض الضيق)
-                font_title = win32ui.CreateFont({
-                    "name": "Arial",
-                    "height": int(vert_res * 0.025),
-                    "weight": 700,
-                    "charset": 178
-                })
-                
-                font_header = win32ui.CreateFont({
-                    "name": "Arial",
-                    "height": int(vert_res * 0.018),
-                    "weight": 700,
-                    "charset": 178
-                })
-                
-                font_normal = win32ui.CreateFont({
-                    "name": "Arial",
-                    "height": int(vert_res * 0.012),
-                    "weight": 400,
-                    "charset": 178
-                })
-                
-                # دوال مساعدة للكتابة
-                def draw_text_centered(text, y_pos, font):
-                    hdc.SelectObject(font)
-                    size = hdc.GetTextExtent(text)
-                    x_pos = (horz_res - size[0]) // 2
-                    hdc.TextOut(x_pos, y_pos, text)
-                    return size[1]
-
-                def draw_text_right(text, x_right, y_pos, font):
-                    hdc.SelectObject(font)
-                    size = hdc.GetTextExtent(text)
-                    x_pos = x_right - size[0]
-                    hdc.TextOut(x_pos, y_pos, text)
-                    return size[1]
-                
-                def draw_text_left(text, x_left, y_pos, font):
-                    hdc.SelectObject(font)
-                    hdc.TextOut(x_left, y_pos, text)
-                    return hdc.GetTextExtent(text)[1]
-
-                # الرأس
-                y += draw_text_centered("كشف حساب بائع", y, font_title) + int(vert_res * 0.005)
-                y += draw_text_centered("خلفاء الحاج محي غريب بعجر", y, font_header) + int(vert_res * 0.01)
-                
-                # معلومات
-                hdc.SelectObject(font_normal)
-                line_height = hdc.GetTextExtent("A")[1]
-                
-                # التاريخ (يسار) والبائع (يمين)
-                draw_text_left(f"التاريخ: {self.data['invoice_date']}", margin_x, y, font_normal)
-                draw_text_right(f"البائع: {self.data['seller_name']}", horz_res - margin_x, y, font_normal)
-                
-                y += line_height * 2
-                
-                # جدول - الأعمدة من اليمين لليسار
-                cols = [
-                    ("الصنف", 0.35),
-                    ("السعر", 0.15),
-                    ("الوزن", 0.15),
-                    ("العدد", 0.15),
-                    ("المبلغ", 0.20)
-                ]
-                
-                # رسم رأس الجدول
-                current_x = horz_res - margin_x
-                hdc.SelectObject(font_header)
-                
-                # خط علوي
-                hdc.MoveTo(margin_x, y)
-                hdc.LineTo(horz_res - margin_x, y)
-                
-                row_height = int(line_height * 1.5)
-                text_y = y + (row_height - line_height) // 2
-                
-                x_positions = []
-                
-                for title, ratio in cols:
-                    col_width = int(width * ratio)
-                    col_center = current_x - (col_width // 2)
-                    size = hdc.GetTextExtent(title)
-                    hdc.TextOut(col_center - (size[0]//2), text_y, title)
-                    
-                    x_positions.append((current_x, col_width))
-                    current_x -= col_width
-                
-                y += row_height
-                hdc.MoveTo(margin_x, y)
-                hdc.LineTo(horz_res - margin_x, y)
-                
-                # البيانات
-                hdc.SelectObject(font_normal)
-                
-                for trans in self.data['transactions']:
-                    # التحقق من نهاية الصفحة
-                    if y > vert_res - margin_y - (line_height * 5):
-                        hdc.EndPage()
-                        hdc.StartPage()
-                        y = margin_y
-                    
-                    item = str(trans[0])
-                    price = f"{trans[3]:.2f}" if trans[3] else ""
-                    weight = f"{trans[1]:.2f}" if trans[1] else ""
-                    count = f"{trans[2]:.0f}" if trans[2] else ""
-                    amount = f"{trans[4]:.2f}" if trans[4] else ""
-                    
-                    row_vals = [item, price, weight, count, amount]
-                    
-                    text_y = y + (row_height - line_height) // 2
-                    
-                    for i, val in enumerate(row_vals):
-                        start_x, col_w = x_positions[i]
-                        size = hdc.GetTextExtent(str(val))
-                        center_x = start_x - (col_w // 2) - (size[0] // 2)
-                        hdc.TextOut(center_x, text_y, str(val))
-                    
-                    y += row_height
-
-                y += int(line_height * 0.5)
-                hdc.MoveTo(margin_x, y)
-                hdc.LineTo(horz_res - margin_x, y)
-                y += int(line_height * 0.5)
-                
-                # الإجماليات
-                hdc.SelectObject(font_header)
-                
-                def draw_total_row(label, value):
-                    nonlocal y
-                    draw_text_right(f"{label}: {value}", horz_res - margin_x, y, font_header)
-                    y += int(line_height * 1.5)
-
-                draw_total_row("إجمالي البضاعة", f"{self.data['total_goods']:.2f}")
-                draw_total_row("المدفوع", f"{self.data['total_paid']:.2f}")
-                draw_total_row("المتبقي", f"{self.data['final_balance']:.2f}")
-
-                hdc.EndPage()
-                hdc.EndDoc()
-                
-            finally:
-                win32print.ClosePrinter(hprinter)
-                
-            messagebox.showinfo("نجاح", "تم إرسال الفاتورة للطابعة")
-
         except Exception as e:
-            messagebox.showerror("خطأ", f"فشلت الطباعة:\n{e}")
+            messagebox.showerror("خطأ", f"فشلت الطباعة: {e}")
+

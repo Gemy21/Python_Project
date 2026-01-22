@@ -53,6 +53,8 @@ class ClientsPage:
         # Variables
         self.search_var = tk.StringVar()
         self.filter_item_var = tk.StringVar()
+        self.filter_date_var = tk.StringVar()
+        self.filter_client_var = tk.StringVar()
         
         self.table_rows = []
         self.selected_transfer_id = None
@@ -88,26 +90,39 @@ class ClientsPage:
             e = tk.Entry(parent, textvariable=var, font=self.fonts['entry'], width=width, justify='center')
             return e
 
-        # Right Side: Search
-        search_frame = tk.Frame(controls, bg=self.colors['header_bg'])
-        search_frame.pack(side=tk.RIGHT, padx=10)
-        tk.Label(search_frame, text="بحث (عميل/بائع):", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
-        search_entry = make_entry(search_frame, self.search_var, width=25)
-        search_entry.pack(side=tk.RIGHT)
-        search_entry.bind('<KeyRelease>', self.filter_table)
+        # --- Data for filters ---
+        transfers = self.db.get_agriculture_transfers()
+        unique_dates = set()
+        unique_clients = set()
+        for t in transfers:
+            if t[8] == 'in': # Only client transfers
+                if t[9]: unique_dates.add(t[9].split(' ')[0])
+                if t[1]: unique_clients.add(t[1])
         
-        # Middle: Filter by Item
-        filter_frame = tk.Frame(controls, bg=self.colors['header_bg'])
-        filter_frame.pack(side=tk.RIGHT, padx=20)
-        tk.Label(filter_frame, text="تصفية بالصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+        sorted_dates = sorted(list(unique_dates), reverse=True)
+        sorted_clients = sorted(list(unique_clients))
         
+        # --- Filters (Right Side) ---
+        def create_filter(parent, var, values, label_text, width=15):
+            f_frame = tk.Frame(parent, bg=self.colors['header_bg'])
+            f_frame.pack(side=tk.RIGHT, padx=10)
+            tk.Label(f_frame, text=label_text, font=self.fonts['button'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+            cb = ttk.Combobox(f_frame, textvariable=var, values=['الكل'] + values, font=('Arial', 12), width=width, justify='center', state='readonly')
+            cb.pack(side=tk.RIGHT)
+            cb.current(0)
+            cb.bind('<<ComboboxSelected>>', self.filter_table)
+            return cb
+
+        # 1. Date Filter
+        create_filter(controls, self.filter_date_var, sorted_dates, "التاريخ:")
+
+        # 2. Client Filter (Naqla)
+        create_filter(controls, self.filter_client_var, sorted_clients, "العميل (النقلة):", width=20)
+        
+        # 3. Item Filter
         meals = self.db.get_all_meals()
         meal_names = [m[1] for m in meals]
-        
-        filter_combo = ttk.Combobox(filter_frame, textvariable=self.filter_item_var, values=['الكل'] + meal_names, font=self.fonts['entry'], width=20, justify='center')
-        filter_combo.pack(side=tk.RIGHT)
-        filter_combo.bind('<<ComboboxSelected>>', self.filter_table)
-        filter_combo.current(0)
+        create_filter(controls, self.filter_item_var, meal_names, "الصنف:")
         
 
 
@@ -200,7 +215,8 @@ class ClientsPage:
         transfers = self.db.get_agriculture_transfers()
         
         # Filter logic
-        search_q = self.search_var.get().lower()
+        filter_date = self.filter_date_var.get()
+        filter_client = self.filter_client_var.get()
         filter_item = self.filter_item_var.get()
         
         filtered_data = []
@@ -209,14 +225,20 @@ class ClientsPage:
             if row[8] != 'in': # Only clients
                 continue
                 
-            client = str(row[1]).lower()
-            seller = str(row[2]).lower()
+            client = str(row[1])
             item_name = str(row[3])
+            date_str = row[9].split(' ')[0] if row[9] else ""
             
-            if search_q and (search_q not in client and search_q not in seller):
+            # Date Filter
+            if filter_date and filter_date != 'الكل' and date_str != filter_date:
+                continue
+            
+            # Client Filter
+            if filter_client and filter_client != 'الكل' and client != filter_client:
                 continue
                 
-            if filter_item and filter_item != 'الكل' and filter_item != item_name:
+            # Item Filter
+            if filter_item and filter_item != 'الكل' and item_name != filter_item:
                 continue
             
             filtered_data.append(row)

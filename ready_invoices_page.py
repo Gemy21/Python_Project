@@ -360,7 +360,7 @@ class ReadyInvoicesPage:
         transactions = []
         # Add goods
         for t in self.processed_transactions:
-            transactions.append((t['item'], t['weight'], t['count'], t['price'], t['amount'], t['type']))
+            transactions.append((t['item'], t['weight'], t['count'], t['price'], t['amount'], "بضاعة"))
             
         # Add deductions
         if vals['nolon'] > 0: transactions.append(("نولون", 0, 0, 0, vals['nolon'], "خصم"))
