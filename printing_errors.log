@@ -1,0 +1,2 @@
+2026-01-29 22:50:08,033 - ERROR - Printing error: (31, 'ShellExecute', 'A device attached to the system is not functioning.')
+2026-01-31 00:15:27,879 - WARNING - ShellExecute 'print' failed, falling back to 'open': (31, 'ShellExecute', 'A device attached to the system is not functioning.')

@@ -105,60 +105,84 @@ class AgricultureTransferPage:
         controls_row = tk.Frame(top_frame, bg=self.colors['header_bg'])
         controls_row.pack(fill=tk.X, pady=25)
         
-        # Date (Left)
+        # Order (Right to Left): Date -> Shipment Name -> Item -> Unit Price
+        
+        # 1. Date (First, Rightmost)
         date_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
-        date_frame.pack(side=tk.LEFT, padx=10)
+        date_frame.pack(side=tk.RIGHT, padx=10)
         
-        self.date_var = tk.StringVar(value=datetime.now().strftime("%Y-%m-%d"))
-        date_entry = make_entry(date_frame, self.date_var, width=12)
-        date_entry.pack(side=tk.LEFT, padx=5)
-        date_entry.config(state='normal', bg='white')
+        tk.Label(date_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
         
-        tk.Label(date_frame, text="التاريخ:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
+        # Generate last 30 days for autocomplete
+        from datetime import timedelta
+        today = datetime.now()
+        date_values = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(30)]
         
-        # Price (Center-Left)
-        price_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
-        price_frame.pack(side=tk.LEFT, padx=10)
+        self.date_var = tk.StringVar(value=today.strftime("%Y-%m-%d"))
         
-        self.price_entry = make_entry(price_frame, self.price_var, width=12)
-        self.price_entry.pack(side=tk.LEFT, padx=5)
-        self.price_entry.bind('<Return>', self.on_price_enter)
-        self.price_entry.bind('<Tab>', self.on_price_enter)
+        self.date_combo = ttk.Combobox(date_frame, textvariable=self.date_var, values=date_values, 
+                                      font=('Arial', 14), width=12, justify='center')
+        self.date_combo.pack(side=tk.RIGHT, padx=5)
         
-        tk.Label(price_frame, text="السعر:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
+        def normalize_date(event=None):
+            """Convert Arabic/Eastern digits to Western digits"""
+            val = self.date_var.get()
+            if not val: return
+            
+            # Map Arabic-Indic digits to Western
+            western = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+            arabic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩']
+            
+            normalized_val = val
+            for a, w in zip(arabic, western):
+                normalized_val = normalized_val.replace(a, w)
+            
+            if normalized_val != val:
+                self.date_var.set(normalized_val)
+            
+            # Move focus if Return was pressed
+            if event and event.keysym == 'Return':
+                self.client_combo.focus()
+                return "break"
+
+        self.date_combo.bind('<FocusOut>', normalize_date)
+        self.date_combo.bind('<Return>', normalize_date)
+        self.date_combo.bind('<Tab>', lambda e: self.client_combo.focus()) # allow standard tab
         
-        # Client (Center)
+        # 2. Shipment Name (Client)
         client_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
         client_frame.pack(side=tk.RIGHT, padx=10)
         
+        tk.Label(client_frame, text="اسم النقلة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+
         clients = self.db.get_all_clients_accounts()
         client_names = [c[1] for c in clients]
         
         self.client_combo = ttk.Combobox(client_frame, textvariable=self.shipment_var, values=client_names, 
                                         font=self.fonts['entry'], width=25, justify='center')
-        self.client_combo.pack(side=tk.LEFT, padx=5)
+        self.client_combo.pack(side=tk.RIGHT, padx=5)
         self.client_combo.bind('<Return>', self.on_client_enter)
         self.client_combo.bind('<Tab>', self.on_client_enter)
-        self.client_combo.focus()
+        self.client_combo.focus() # Start focus here
         
-        # زر تفاصيل النقلة
-        details_btn = tk.Button(client_frame, text="تفاصيل النقلة", command=self.open_shipment_details,
-                               font=('Playpen Sans Arabic', 12, 'bold'), bg=self.colors['accent'], fg='white',
-                               cursor='hand2', relief=tk.RAISED, bd=2)
-        details_btn.pack(side=tk.LEFT, padx=5)
+        # Shipment Details Button (Left of entry in this frame)
+        details_btn = tk.Button(client_frame, text="...", command=self.open_shipment_details,
+                               font=('Arial', 10, 'bold'), bg=self.colors['accent'], fg='white',
+                               cursor='hand2', relief=tk.RAISED, bd=2, width=3)
+        details_btn.pack(side=tk.RIGHT, padx=5)
 
-        tk.Label(client_frame, text="اسم النقلة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
-        
-        # Item (Right)
+        # 3. Item
         item_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
         item_frame.pack(side=tk.RIGHT, padx=10)
         
+        tk.Label(item_frame, text="الصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+
         meals = self.db.get_all_meals()
         meal_names = [m[1] for m in meals]
         
         self.item_combo = ttk.Combobox(item_frame, textvariable=self.item_var, values=meal_names, 
                                        font=self.fonts['entry'], width=15, justify='center')
-        self.item_combo.pack(side=tk.LEFT, padx=5)
+        self.item_combo.pack(side=tk.RIGHT, padx=5)
         self.item_combo.bind('<Return>', self.on_item_enter)
         self.item_combo.bind('<Tab>', self.on_item_enter)
         
@@ -170,12 +194,22 @@ class AgricultureTransferPage:
                         self.price_var.set(str(meal[2]))
                         return
         self.item_combo.bind('<<ComboboxSelected>>', on_item_change)
+
+        # 4. Unit Price
+        price_frame = tk.Frame(controls_row, bg=self.colors['header_bg'])
+        price_frame.pack(side=tk.RIGHT, padx=10)
         
-        tk.Label(item_frame, text="الصنف:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.LEFT, padx=5)
+        tk.Label(price_frame, text="سعر الوحدة:", font=self.fonts['label'], bg=self.colors['header_bg'], fg='white').pack(side=tk.RIGHT, padx=5)
+
+        self.price_entry = make_entry(price_frame, self.price_var, width=10)
+        self.price_entry.pack(side=tk.RIGHT, padx=5)
+        self.price_entry.bind('<Return>', self.on_price_enter)
+        self.price_entry.bind('<Tab>', self.on_price_enter)
 
     def on_client_enter(self, event=None):
-        """When Enter/Tab is pressed in client field, move to item field"""
-        self.item_combo.focus()
+        """When Enter/Tab is pressed in client field, open details then move to item"""
+        # Open details popup automatically
+        self.open_shipment_details(auto_focus_item=True)
         return "break"
         
     def on_item_enter(self, event=None):
@@ -260,9 +294,15 @@ class AgricultureTransferPage:
                     e.insert(0, price_val)
                     e.config(state='readonly')
             elif col_idx == 2:  # Client name
-                shipment_val = self.shipment_var.get()
-                if shipment_val:
-                    e.insert(0, shipment_val)
+                # Use Full Shipment Name logic
+                client_val = self.shipment_var.get()
+                date_val = self.date_var.get()
+                full_name = client_val
+                if client_val and date_val and date_val not in client_val:
+                    full_name = f"{client_val} - {date_val}"
+
+                if full_name:
+                    e.insert(0, full_name)
                     e.config(state='readonly')
             
             e.grid(row=row_num, column=col_idx, sticky='nsew', padx=2, pady=2, ipady=15)
@@ -415,100 +455,101 @@ class AgricultureTransferPage:
         for row in self.table_rows:
             for widget in row:
                 widget.destroy()
-    def open_shipment_details(self):
-        """Open a window to manage shipment totals and view progress"""
-        shipment_name = self.shipment_var.get().strip()
-        if not shipment_name:
-            messagebox.showwarning("تنبيه", "الرجاء اختيار أو كتابة اسم النقلة أولاً")
+
+    def open_shipment_details(self, auto_focus_item=False):
+        """Open a window to manage shipment TOTALS (Count Only)"""
+        shipment_name_raw = self.shipment_var.get().strip()
+        date_val = self.date_var.get().strip()
+        
+        if not shipment_name_raw:
+            if not auto_focus_item:
+                messagebox.showwarning("تنبيه", "الرجاء اختيار أو كتابة اسم النقلة أولاً")
             return
             
+        if not date_val:
+            date_val = datetime.now().strftime("%Y-%m-%d")
+        
+        # Use FULL shipment name (Name - Date) for DB lookup
+        shipment_full_name = shipment_name_raw
+        if date_val and date_val not in shipment_name_raw:
+            shipment_full_name = f"{shipment_name_raw} - {date_val}"
+
         # Create Popup
         details_window = tk.Toplevel(self.window)
-        details_window.title(f"تفاصيل النقلة: {shipment_name}")
-        details_window.geometry("500x450")
+        details_window.title(f"تفاصيل النقلة: {shipment_full_name}")
+        details_window.geometry("400x350") # Smaller window
         details_window.configure(bg=self.colors['bg'])
         
         # Center Window
         details_window.update_idletasks()
-        x = (details_window.winfo_screenwidth() // 2) - 250
-        y = (details_window.winfo_screenheight() // 2) - 225
-        details_window.geometry(f"500x450+{x}+{y}")
+        x = (details_window.winfo_screenwidth() // 2) - 200
+        y = (details_window.winfo_screenheight() // 2) - 175
+        details_window.geometry(f"400x350+{x}+{y}")
         
         # Data
-        details = self.db.get_shipment_details(shipment_name)
+        details = self.db.get_shipment_details(shipment_full_name)
         
-        total_w = details['total_weight'] if details else 0.0
         total_c = details['total_count'] if details else 0.0
-        sold_w = details['sold_weight'] if details else 0.0
         sold_c = details['sold_count'] if details else 0.0
         
         # --- UI Construction ---
         
-        # 1. Total Inputs (Editable)
-        input_frame = tk.LabelFrame(details_window, text="إجمالي النقلة (الوارد)", font=self.fonts['label'], 
+        # 1. Total Input (Editable)
+        input_frame = tk.LabelFrame(details_window, text="إجمالي العدد (الوارد)", font=self.fonts['label'], 
                                    bg=self.colors['bg'], fg=self.colors['button_bg'], padx=20, pady=20)
         input_frame.pack(fill=tk.X, padx=20, pady=10)
         
-        # Total Weight
-        tk.Label(input_frame, text="الوزن الكلي:", font=('Arial', 14), bg=self.colors['bg']).grid(row=0, column=1, padx=5, pady=5, sticky='e')
-        entry_total_w = tk.Entry(input_frame, font=('Arial', 14), justify='center', width=15)
-        entry_total_w.grid(row=0, column=0, padx=5, pady=5)
-        entry_total_w.insert(0, str(total_w))
-        
         # Total Count
-        tk.Label(input_frame, text="العدد الكلي:", font=('Arial', 14), bg=self.colors['bg']).grid(row=1, column=1, padx=5, pady=5, sticky='e')
-        entry_total_c = tk.Entry(input_frame, font=('Arial', 14), justify='center', width=15)
-        entry_total_c.grid(row=1, column=0, padx=5, pady=5)
-        entry_total_c.insert(0, str(total_c))
+        tk.Label(input_frame, text="العدد الكلي للنقلة:", font=('Arial', 14), bg=self.colors['bg']).pack(side=tk.RIGHT, padx=5)
+        entry_total_c = tk.Entry(input_frame, font=('Arial', 16, 'bold'), justify='center', width=10)
+        entry_total_c.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        entry_total_c.insert(0, str(total_c) if total_c > 0 else "")
+        entry_total_c.focus()
         
         # 2. Progress Display (Read-only)
-        stats_frame = tk.LabelFrame(details_window, text="حالة البيع (المنصرف)", font=self.fonts['label'], 
+        stats_frame = tk.LabelFrame(details_window, text="حالة التوزيع (المنصرف)", font=self.fonts['label'], 
                                    bg=self.colors['bg'], fg=self.colors['text_primary'], padx=20, pady=20)
         stats_frame.pack(fill=tk.X, padx=20, pady=5)
         
         # Headers
-        tk.Label(stats_frame, text="المباع", font=('Arial', 12, 'bold'), bg=self.colors['bg'], fg='green').grid(row=0, column=1, padx=20)
+        tk.Label(stats_frame, text="تم توزيعه", font=('Arial', 12, 'bold'), bg=self.colors['bg'], fg='green').grid(row=0, column=1, padx=20)
         tk.Label(stats_frame, text="المتبقي", font=('Arial', 12, 'bold'), bg=self.colors['bg'], fg='red').grid(row=0, column=0, padx=20)
         
-        # Labels
-        tk.Label(stats_frame, text="الوزن:", font=('Arial', 12, 'bold'), bg=self.colors['bg']).grid(row=1, column=2, sticky='e', pady=10)
-        tk.Label(stats_frame, text="العدد:", font=('Arial', 12, 'bold'), bg=self.colors['bg']).grid(row=2, column=2, sticky='e', pady=10)
-        
         # Values
-        lbl_sold_w = tk.Label(stats_frame, text=f"{sold_w}", font=('Arial', 14), bg=self.colors['bg'], fg='green')
-        lbl_sold_w.grid(row=1, column=1)
+        remaining = total_c - sold_c
+        lbl_sold_c = tk.Label(stats_frame, text=f"{sold_c:.0f}", font=('Arial', 16), bg=self.colors['bg'], fg='green')
+        lbl_sold_c.grid(row=1, column=1, pady=5)
         
-        lbl_rem_w = tk.Label(stats_frame, text=f"{total_w - sold_w}", font=('Arial', 14), bg=self.colors['bg'], fg='red')
-        lbl_rem_w.grid(row=1, column=0)
-        
-        lbl_sold_c = tk.Label(stats_frame, text=f"{sold_c}", font=('Arial', 14), bg=self.colors['bg'], fg='green')
-        lbl_sold_c.grid(row=2, column=1)
-        
-        lbl_rem_c = tk.Label(stats_frame, text=f"{total_c - sold_c}", font=('Arial', 14), bg=self.colors['bg'], fg='red')
-        lbl_rem_c.grid(row=2, column=0)
+        lbl_rem_c = tk.Label(stats_frame, text=f"{remaining:.0f}", font=('Arial', 16, 'bold'), bg=self.colors['bg'], fg='red')
+        lbl_rem_c.grid(row=1, column=0, pady=5)
         
         # Save Function
-        def save_details():
+        def save_details(event=None):
             try:
-                new_w = float(entry_total_w.get())
-                new_c = float(entry_total_c.get())
+                val = entry_total_c.get().strip()
+                new_c = float(val) if val else 0.0
                 
-                self.db.save_shipment_details(shipment_name, new_w, new_c)
+                # Save just the count. Assuming 0 for weight/eq if not present, keeping old values if getting strict, 
+                # but DB save method overwrites. Since user doesn't care about weight now, 0 is fine.
+                # Actually better to preserve weight/eq if they exist in DB by getting them again or using loaded `details`.
+                current_w = details['total_weight'] if details else 0.0
+                current_eq = details['total_equipment_count'] if details else 0.0
                 
-                # Update Labels
-                current_rem_w = new_w - sold_w
-                current_rem_c = new_c - sold_c
+                self.db.save_shipment_details(shipment_full_name, current_w, new_c, current_eq)
                 
-                lbl_rem_w.config(text=f"{current_rem_w}")
-                lbl_rem_c.config(text=f"{current_rem_c}")
-                
-                messagebox.showinfo("نجاح", "تم حفظ بيانات النقلة بنجاح", parent=details_window)
+                # Close popup
                 details_window.destroy()
                 
+                # Move focus to Item combo in main window
+                if auto_focus_item:
+                    self.item_combo.focus()
+                
             except ValueError:
-                messagebox.showerror("خطأ", "الرجاء إدخال أرقام صحيحة", parent=details_window)
+                messagebox.showerror("خطأ", "الرجاء إدخال رقم صحيح", parent=details_window)
         
         # Save Button
-        tk.Button(details_window, text="حفظ التعديلات", command=save_details, 
+        tk.Button(details_window, text="حفظ (Enter)", command=save_details, 
                  font=self.fonts['button'], bg=self.colors['button_bg'], fg='white', 
-                 cursor='hand2', width=20).pack(pady=20)
+                 cursor='hand2', width=20).pack(pady=10)
+                 
+        entry_total_c.bind('<Return>', save_details)

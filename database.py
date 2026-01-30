@@ -1339,18 +1339,71 @@ class Database:
 
 
     def delete_agriculture_transfer(self, trans_id):
-
-        """حذف سجل ترحيل زراعة"""
-
+        """حذف سجل ترحيل زراعة مع تحديث حسابات البائع والعميل بشكل متزامن"""
         conn = self.get_connection()
-
         cursor = conn.cursor()
+        
+        try:
+            # 1. جلب بيانات السجل المراد حذفه
+            cursor.execute('''
+                SELECT shipment_name, seller_name, item_name, unit_price, weight, count, transfer_type 
+                FROM agriculture_transfers WHERE id = ?
+            ''', (trans_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                conn.close()
+                return False
+                
+            shipment_name, seller_name, item_name, unit_price, weight, count, transfer_type = row
+            
+            # حساب المبلغ
+            amount = 0.0
+            if weight > 0:
+                amount = weight * unit_price
+            elif count > 0:
+                amount = count * unit_price
+            
+            # 2. عكس رصيد العميل (إعادة المبلغ لرصيده)
+            # اسم العميل الخام قبل التاريخ
+            raw_client = shipment_name.split(' - ')[0]
+            cursor.execute('UPDATE clients_accounts SET balance = balance + ? WHERE client_name = ?', (amount, raw_client))
+            
+            # 3. حذف معاملة البائع المرتبطة
+            cursor.execute('SELECT id FROM sellers_accounts WHERE seller_name = ?', (seller_name,))
+            seller_row = cursor.fetchone()
+            if seller_row:
+                seller_id = seller_row[0]
+                note_pattern = f"نقلة من العميل {shipment_name}"
+                
+                # حذف من جدول المعاملات
+                cursor.execute('''
+                    DELETE FROM seller_transactions 
+                    WHERE seller_id = ? AND item_name = ? AND amount = ? AND note = ?
+                ''', (seller_id, item_name, amount, note_pattern))
+                
+                # تحديث الرصيد في جدول الحسابات (لطرح المبلغ الذي كان مضافاً كبضاعة)
+                cursor.execute('UPDATE sellers_accounts SET remaining_amount = remaining_amount - ? WHERE id = ?', (amount, seller_id))
 
-        cursor.execute('DELETE FROM agriculture_transfers WHERE id = ?', (trans_id,))
-
-        conn.commit()
-
-        conn.close()
+            # 4. حذف السجلات المزدوجة من جدول الترحيل (In & Out)
+            cursor.execute('''
+                DELETE FROM agriculture_transfers 
+                WHERE shipment_name = ? 
+                AND seller_name = ? 
+                AND item_name = ? 
+                AND unit_price = ? 
+                AND weight = ? 
+                AND count = ?
+            ''', (shipment_name, seller_name, item_name, unit_price, weight, count))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error in delete_agriculture_transfer: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
 
 
 
@@ -1977,13 +2030,13 @@ class Database:
 
 
 
-    # --- طر�  ا� تعا�& �  �& ع تفاص�`�  ا� �  � � ات ---
+    # --- طرق التعامل مع تفاصيل الشحنات ---
 
 
 
-    def save_shipment_details(self, shipment_name, total_weight, total_count):
+    def save_shipment_details(self, shipment_name, total_weight, total_count, total_equipment_count=0):
 
-        """حفظ أ�� تحد�`ث تفاص�`�  ا� �  � � ة (ا� ��ز�   ��ا� عدد ا� ْ� �`)"""
+        """حفظ أو تحديث تفاصيل الشحنة (الوزن الكلي، العدد الكلي، عدد العدة الكلي)"""
 
         conn = self.get_connection()
 
@@ -1991,7 +2044,7 @@ class Database:
 
         
 
-        # ا� تأْد �& �   ��ج��د ا� جد���  (� � حا� ات ا� ت�` � �&  �`ت�&  ف�`�! ا استدعاء init_database)
+        # التأكد من وجود الجدول وتحديثه
 
         cursor.execute('''
 
@@ -2005,6 +2058,8 @@ class Database:
 
                 total_count REAL DEFAULT 0,
 
+                total_equipment_count REAL DEFAULT 0,
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
             )
@@ -2012,6 +2067,18 @@ class Database:
         ''')
 
         
+
+        # محاولة إضافة عمود total_equipment_count إذا لم يكن موجوداً
+
+        try:
+
+            cursor.execute('ALTER TABLE shipment_details ADD COLUMN total_equipment_count REAL DEFAULT 0')
+
+        except sqlite3.OperationalError:
+
+            pass
+
+            
 
         cursor.execute('SELECT id FROM shipment_details WHERE shipment_name = ?', (shipment_name,))
 
@@ -2021,15 +2088,15 @@ class Database:
 
         if existing:
 
-            cursor.execute('UPDATE shipment_details SET total_weight=?, total_count=? WHERE shipment_name=?', 
+            cursor.execute('UPDATE shipment_details SET total_weight=?, total_count=?, total_equipment_count=? WHERE shipment_name=?', 
 
-                          (total_weight, total_count, shipment_name))
+                          (total_weight, total_count, total_equipment_count, shipment_name))
 
         else:
 
-            cursor.execute('INSERT INTO shipment_details (shipment_name, total_weight, total_count) VALUES (?, ?, ?)', 
+            cursor.execute('INSERT INTO shipment_details (shipment_name, total_weight, total_count, total_equipment_count) VALUES (?, ?, ?, ?)', 
 
-                          (shipment_name, total_weight, total_count))
+                          (shipment_name, total_weight, total_count, total_equipment_count))
 
             
 
@@ -2041,7 +2108,7 @@ class Database:
 
     def get_shipment_details(self, shipment_name):
 
-        """ج� ب تفاص�`�  �  � � ة �& حددة �& ع حساب ا� �& باع �& �  �! ا"""
+        """جلب تفاصيل شحنة محددة مع حساب المباع منها"""
 
         conn = self.get_connection()
 
@@ -2051,7 +2118,17 @@ class Database:
 
         # 1. Get totals
 
-        cursor.execute('SELECT total_weight, total_count FROM shipment_details WHERE shipment_name = ?', (shipment_name,))
+        try:
+
+            cursor.execute('SELECT total_weight, total_count, total_equipment_count FROM shipment_details WHERE shipment_name = ?', (shipment_name,))
+
+        except sqlite3.OperationalError:
+
+            # Fallback if total_equipment_count column does not exist yet
+
+            cursor.execute('SELECT total_weight, total_count FROM shipment_details WHERE shipment_name = ?', (shipment_name,))
+
+        
 
         details = cursor.fetchone()
 
@@ -2063,7 +2140,11 @@ class Database:
 
             
 
-        total_weight, total_count = details
+        total_weight = details[0]
+
+        total_count = details[1]
+
+        total_equipment_count = details[2] if len(details) > 2 else 0 # Handle case where column might not exist
 
         
 
@@ -2100,6 +2181,8 @@ class Database:
             'total_weight': total_weight,
 
             'total_count': total_count,
+
+            'total_equipment_count': total_equipment_count,
 
             'sold_weight': sold_weight,
 

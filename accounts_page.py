@@ -1366,10 +1366,11 @@ class CurrentAccountPage:
 
     def print_invoice(self): 
         """طباعة كشف حساب لفترة محددة"""
-        from print_utils import PrintPreviewWindow
+        from seller_statement_pdf import SellerStatementPrintWindow
         from datetime import datetime
         
         # نافذة اختيار الفترة
+        # ... (Rest is same, just replace usage inside)
         date_window = tk.Toplevel(self.window)
         date_window.title("طباعة كشف حساب")
         date_window.geometry("400x250")
@@ -1469,11 +1470,12 @@ class CurrentAccountPage:
                     'transactions': filtered_transactions,
                     'total_goods': total_goods,
                     'total_paid': total_paid,
+                    'total_discount': total_discount,
                     'final_balance': final_balance
                 }
                 
                 date_window.destroy()
-                PrintPreviewWindow(self.window, report_data)
+                SellerStatementPrintWindow(self.window, report_data)
                 
             except ValueError:
                 messagebox.showerror("خطأ", "تنسيق التاريخ غير صحيح (YYYY-MM-DD)", parent=date_window)
